@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Monitoring PRO</title>
+
+<style>
+body {
+    margin: 0;
+    font-family: Arial;
+    background: #0b0f1a;
+    color: white;
+}
+
+h1 {
+    text-align: center;
+    padding: 20px;
+}
+
+.container {
+    display: flex;
+    justify-content: space-around;
+    flex-wrap: wrap;
+}
+
+.card {
+    width: 300px;
+    padding: 20px;
+    margin: 15px;
+    border-radius: 12px;
+    text-align: center;
+    font-size: 18px;
+}
+
+.low { background: #1f8f3a; }
+.medium { background: #c98a00; }
+.high { background: #c0392b; }
+
+.map {
+    height: 300px;
+    margin: 20px;
+}
+</style>
+
+</head>
+<body>
+
+<h1>🌬️ Monitoring PRO</h1>
+
+<div class="container">
+    <div id="grodno" class="card">Ładowanie...</div>
+    <div id="brzesc" class="card">Ładowanie...</div>
+</div>
+
+<div id="map" class="map"></div>
+
+<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+<link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
+
+<script>
+let map = L.map('map').setView([52.3, 23.5], 6);
+
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: ''
+}).addTo(map);
+
+// punkty
+let grodno = [53.6694, 23.8131];
+let bialystok = [53.1325, 23.1688];
+let brzesc = [52.0976, 23.7341];
+let lublin = [51.2465, 22.5684];
+
+function drawLine(from, direction, speed, color) {
+    let distance = speed * 0.1;
+
+    let lat2 = from[0] + distance * Math.cos(direction * Math.PI/180);
+    let lon2 = from[1] + distance * Math.sin(direction * Math.PI/180);
+
+    L.polyline([from, [lat2, lon2]], {color: color}).addTo(map);
+}
+function getDirection(fromLat, fromLon, toLat, toLon) {
+    const dLon = (toLon - fromLon) * Math.PI / 180;
+    const lat1 = fromLat * Math.PI / 180;
+    const lat2 = toLat * Math.PI / 180;
+
+    const y = Math.sin(dLon) * Math.cos(lat2);
+    const x = Math.cos(lat1) * Math.sin(lat2) -
+              Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLon);
+
+    let brng = Math.atan2(y, x) * 180 / Math.PI;
+    return (brng + 360) % 360;
+}
+async function check(lat, lon, el, name, target) {
+    let res = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=winddirection_10m,windspeed_10m`);
+    let data = await res.json();
+
+    let dir = data.current.winddirection_10m;
+    let speed = data.current.windspeed_10m;
+
+    let risk = "LOW";
+    let cls = "low";
+    let color = "green";
+
+    let targetDir = getDirection(lat, lon, target[0], target[1]);
+
+let diff = Math.abs(dir - targetDir);
+if (diff > 180) diff = 360 - diff;
+
+if (diff < 30 && speed > 5 && !localStorage.getItem(name)) {
+
+    localStorage.setItem(name, "sent");
+
+    risk = "HIGH";
+    cls = "high";
+    color = "red";
+
+    fetch("https://api.telegram.org/bot8631893584:AAH.../sendMessage?chat_id=2101099763&text=🚨 ALERT REAL: " + name);
+} else if (dir > 50 && dir < 130) {
+    risk = "MEDIUM";
+    cls = "medium";
+    color = "orange";
+}
+
+    document.getElementById(el).className = "card " + cls;
+    document.getElementById(el).innerHTML = `
+        <b>${name}</b><br>
+        Kierunek: ${dir}°<br>
+        Wiatr: ${speed} km/h<br>
+        <b>${risk}</b>
+    `;
+
+    drawLine([lat, lon], dir, speed, color);
+}
+
+// uruchom
+check(53.6694, 23.8131, "grodno", "Grodno → Białystok", bialystok);
+check(52.0976, 23.7341, "brzesc", "Brześć → Lublin", lublin);
+
+setInterval(() => location.reload(), 600000);
+</script>
+
+</body>
+</html>
