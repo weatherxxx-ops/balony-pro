@@ -11,29 +11,13 @@ body{
 margin:0;
 font-family:Arial;
 color:white;
-
-/* 🔥 TŁO BALON */
-background:
-linear-gradient(rgba(11,15,26,0.9), rgba(11,15,26,0.95)),
+background:linear-gradient(rgba(11,15,26,0.9), rgba(11,15,26,0.95)),
 url('https://images.unsplash.com/photo-1504198453319-5ce911bafcde');
-
 background-size:cover;
-background-position:center;
 }
 
-h1{
-text-align:center;
-padding:20px;
-font-size:28px;
-letter-spacing:2px;
-}
-
-#update{
-text-align:center;
-font-size:12px;
-opacity:0.7;
-margin-top:-10px;
-}
+h1{text-align:center;padding:20px;}
+#update{text-align:center;font-size:12px;opacity:0.7;}
 
 .grid{
 display:grid;
@@ -48,11 +32,6 @@ border-radius:16px;
 text-align:center;
 cursor:pointer;
 transition:0.3s;
-backdrop-filter:blur(4px);
-}
-
-.tile:hover{
-transform:scale(1.05);
 }
 
 .low{background:#2ecc71;}
@@ -60,49 +39,23 @@ transform:scale(1.05);
 .high{background:#e67e22;}
 .veryhigh{background:#ff2ea6;}
 
-.tile.active{
-outline:3px solid white;
-}
-
 .wrapper{
 display:flex;
 gap:10px;
 padding:20px;
 }
 
-#map{
-height:260px;
-flex:1;
-}
+#map{height:300px;flex:1;}
 
-.arrow{
-font-size:22px;
-}
-
-.result{
-font-weight:bold;
-margin-top:5px;
-}
-
-.legend{
-position:absolute;
-top:20px;
-right:20px;
-font-size:12px;
-opacity:0.8;
-text-align:right;
-}
+.arrow{font-size:20px;}
+.result{margin-top:5px;font-weight:bold;}
 </style>
-
 </head>
+
 <body>
 
 <h1>🛰 JETFLOW OPS</h1>
 <div id="update"></div>
-
-<div class="legend">
-↑ N<br>→ E<br>↓ S<br>← W
-</div>
 
 <div class="grid">
 <div id="day1" class="tile"></div>
@@ -118,9 +71,9 @@ text-align:right;
 <div class="wrapper">
 <div id="map"></div>
 
-<iframe width="50%" height="260"
-src="https://embed.windy.com/embed2.html?lat=53.2&lon=23.2&zoom=6&level=850h&overlay=wind&metricWind=km%2Fh"
-frameborder="0"></iframe>
+<iframe width="50%" height="300"
+src="https://embed.windy.com/embed2.html?lat=53.2&lon=23.2&zoom=6&level=850h&overlay=wind&metricWind=km%2Fh">
+</iframe>
 
 </div>
 
@@ -128,16 +81,68 @@ frameborder="0"></iframe>
 
 <script>
 
+// ================= MAPA =================
+let map=L.map('map').setView([53.2,23.2],6);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+
+// ================= LOKACJE =================
 const locations=[
 { name:"Baranowicze → Białystok", lat:53.13, lon:26.02, targetLat:53.13, targetLon:23.16 },
 { name:"Baranowicze → Sokółka", lat:53.13, lon:26.02, targetLat:53.41, targetLon:23.50 }
 ];
 
-let map=L.map('map').setView([53.2,23.2],6);
-L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+// ================= TRACKER =================
+let trackerMarker;
+let trackLine=[];
+let polyline;
 
-let windLayer,impactMarker;
+// 🔥 TU PODŁĄCZYSZ PRAWDZIWY TRACKER
+async function getTracker(){
+try{
+/*
+PRZYKŁAD:
+let r=await fetch("https://twoje-api-tracker");
+let j=await r.json();
+return {lat:j.lat, lon:j.lon};
+*/
 
+// 🔴 NA RAZIE SYMULACJA
+return {
+lat:53.3 + (Math.random()-0.5)*0.5,
+lon:24 + (Math.random()-0.5)*0.5
+};
+
+}catch{
+return null;
+}
+}
+
+async function updateTracker(){
+
+let data=await getTracker();
+if(!data) return;
+
+let pos=[data.lat,data.lon];
+
+// marker
+if(!trackerMarker){
+trackerMarker=L.marker(pos).addTo(map).bindPopup("TRACKER LIVE");
+}else{
+trackerMarker.setLatLng(pos);
+}
+
+// ślad
+trackLine.push(pos);
+
+if(polyline) map.removeLayer(polyline);
+polyline=L.polyline(trackLine,{color:'red'}).addTo(map);
+
+}
+
+// update co 10 sek
+setInterval(updateTracker,10000);
+
+// ================= FUNKCJE =================
 function getDate(i){
 let d=new Date();
 d.setDate(d.getDate()+i);
@@ -145,7 +150,7 @@ return d.toLocaleDateString("pl-PL");
 }
 
 function getArrow(deg){
-if(deg<45 || deg>=315) return "↑";
+if(deg<45||deg>=315) return "↑";
 if(deg<135) return "→";
 if(deg<225) return "↓";
 return "←";
@@ -171,8 +176,9 @@ function calcRisk(speed,dir,target){
 let diff=Math.abs(dir-target);
 if(diff>180) diff=360-diff;
 
-if(diff>120) return "low";
-if(diff>60) return "medium";
+if(diff>90) return "low";
+if(diff>45) return "medium";
+
 if(speed>20) return "veryhigh";
 if(speed>14) return "high";
 return "medium";
@@ -184,42 +190,18 @@ return s*(1.8+Math.random()*0.5)*1.2;
 
 async function getWind(lat,lon){
 try{
-let r=await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&hourly=windspeed_10m,winddirection_10m,time`);
-if(!r.ok) throw "err";
+let r=await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&hourly=windspeed_10m,winddirection_10m`);
 return await r.json();
 }catch{
-return{hourly:{time:["x"],windspeed_10m:[6+Math.random()*6],winddirection_10m:[Math.random()*360]}};
+return{hourly:{windspeed_10m:[6+Math.random()*6],winddirection_10m:[Math.random()*360]}};
 }
 }
 
-function simulatePath(lat,lon,dir){
-let pts=[],x=lat,y=lon;
-
-for(let i=0;i<60;i++){
-x+=Math.cos(dir*Math.PI/180)*0.1;
-y+=Math.sin(dir*Math.PI/180)*0.1;
-pts.push([x,y]);
-}
-
-return pts;
-}
-
-function drawWind(lat,lon,dir){
-
-if(windLayer)map.removeLayer(windLayer);
-if(impactMarker)map.removeLayer(impactMarker);
-
-let pts=simulatePath(lat,lon,dir);
-
-windLayer=L.polyline(pts,{color:'cyan'}).addTo(map);
-
-let last=pts[pts.length-1];
-impactMarker=L.marker(last).addTo(map).bindPopup("Punkt przewidywany");
-}
-
+// ================= KAFELKI =================
 async function setTile(id,i,loc){
 
 let el=document.getElementById(id);
+
 let data=await getWind(loc.lat,loc.lon);
 
 let base=data.hourly.windspeed_10m[0];
@@ -239,19 +221,16 @@ el.innerHTML=`
 ${cls.toUpperCase()}<br>
 ${loc.name}<br>
 💨 ${speed.toFixed(1)} km/h<br><br>
-<span class="arrow">${getArrow(dir)} → ${getArrow(target)}</span><br>
+WIATR: ${getArrow(dir)}<br>
+CEL: ${getArrow(target)}<br>
 <div class="result">${result}</div>
 `;
 
-el.onclick=()=>{
-document.querySelectorAll(".tile").forEach(t=>t.classList.remove("active"));
-el.classList.add("active");
-drawWind(loc.lat,loc.lon,dir);
-};
-
 }
 
-document.getElementById("update").innerText="Ostatnia aktualizacja: "+new Date().toLocaleTimeString();
+// ================= START =================
+document.getElementById("update").innerText=
+"Ostatnia aktualizacja: "+new Date().toLocaleTimeString();
 
 for(let i=0;i<8;i++){
 let loc=i<4?locations[0]:locations[1];
