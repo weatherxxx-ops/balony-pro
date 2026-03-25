@@ -89,7 +89,18 @@ function getDirection(fromLat, fromLon, toLat, toLon) {
     let brng = Math.atan2(y, x) * 180 / Math.PI;
     return (brng + 360) % 360;
 }
+function getDirection(fromLat, fromLon, toLat, toLon) {
+    const dLon = (toLon - fromLon) * Math.PI / 180;
+    const lat1 = fromLat * Math.PI / 180;
+    const lat2 = toLat * Math.PI / 180;
 
+    const y = Math.sin(dLon) * Math.cos(lat2);
+    const x = Math.cos(lat1) * Math.sin(lat2) -
+              Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLon);
+
+    let brng = Math.atan2(y, x) * 180 / Math.PI;
+    return (brng + 360) % 360;
+}
 async function check(lat, lon, el, name, target) {
     let res = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=winddirection_10m,windspeed_10m`);
     let data = await res.json();
@@ -103,7 +114,7 @@ async function check(lat, lon, el, name, target) {
 
     let targetDir = getDirection(lat, lon, target[0], target[1]);
 
-let windTo = (dir + 180) % 360;   // 👈 TO MUSI BYĆ NAJPIERW
+let windTo = (dir + 180) % 360;   // 👈 TO MUSI BYĆ 
 
 let diff = Math.abs(windTo - targetDir);
 if (diff > 180) diff = 360 - diff;
