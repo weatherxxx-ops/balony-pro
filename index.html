@@ -107,12 +107,15 @@ async function check(lat, lon, el, name, target) {
     let windTo = (dir + 180) % 360;
 
     let diff = Math.abs(windTo - targetDir);
-    if (diff > 180) diff = 360 - diff;
-
     if (diff < 30 && speed > 5) {
-        risk = "HIGH";
-        cls = "high";
-        color = "red";
+
+    risk = "HIGH";
+    cls = "high";
+    color = "red";
+
+    let img = new Image();
+    img.src = `https://api.telegram.org/bot8631893584:AAHf9dnoKhnjc0TwQmBbaDYzG_1y1S2-fLQ/sendMessage?chat_id=2101099763&text=ALERT ${name}`;
+}
     } else if (diff < 60 && speed > 3) {
         risk = "MEDIUM";
         cls = "medium";
