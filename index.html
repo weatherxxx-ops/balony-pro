@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html>
+<html lang="pl">
 <head>
 <meta charset="UTF-8">
 <title>Monitoring PRO</title>
@@ -8,51 +8,51 @@
 
 <style>
 body {
-  margin: 0;
+  margin:0;
   font-family: Arial;
-  background: #0b0f1a;
-  color: white;
+  background:#0b0f1a;
+  color:white;
 }
 
 h1 {
-  text-align: center;
-  padding: 20px;
+  text-align:center;
+  padding:20px;
 }
 
 .grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 15px;
-  padding: 20px;
+  display:grid;
+  grid-template-columns:repeat(3,1fr);
+  gap:15px;
+  padding:20px;
 }
 
 .tile {
-  padding: 20px;
-  border-radius: 16px;
-  text-align: center;
-  font-size: 16px;
-  transition: 0.3s;
-  cursor: pointer;
+  padding:18px;
+  border-radius:16px;
+  text-align:center;
+  transition:0.3s;
+  cursor:pointer;
 }
 
-.tile.low { background: #2ecc71; }
-.tile.medium { background: #f1c40f; }
-.tile.high { background: #e743c3; }
+.tile.low { background:#2ecc71; }
+.tile.medium { background:#f1c40f; }
+.tile.high { background:#e74c3c; }
+.tile.veryhigh { background:#ff00aa; }
 
-.tile:hover { transform: scale(1.05); }
-.tile.active { outline: 3px solid white; }
+.tile:hover {
+  transform:scale(1.05);
+}
 
-#map {
-  height: 350px;
-  margin: 20px;
-  border-radius: 12px;
+.map {
+  height:300px;
+  margin:20px;
 }
 </style>
 </head>
 
 <body>
 
-<h1>📡 Monitoring PRO</h1>
+<h1>🛰️ Monitoring PRO</h1>
 
 <div class="grid">
   <div id="day1" class="tile">Ładowanie...</div>
@@ -65,100 +65,75 @@ h1 {
   <div id="day8" class="tile">Ładowanie...</div>
 </div>
 
-<div id="map"></div>
+<div id="map" class="map"></div>
 
 <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
 
 <script>
-let map, marker, polyline;
 
-const baseLat = 52.3;
-const baseLon = 23.5;
+// lokalizacje
+const locations = [
+  { name: "Grodno–Białystok", lat:53.13, lon:23.16 },
+  { name: "Michałowo–Bobrowniki", lat:53.30, lon:23.65 }
+];
 
-async function loadData() {
+// mapa
+let map = L.map('map').setView([53.2, 23.3], 8);
 
-  const res = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${baseLat}&longitude=${baseLon}&hourly=windspeed_10m,winddirection_10m`);
-  const data = await res.json();
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
 
-  const wind = data.hourly.windspeed_10m[0];
-  const dir = data.hourly.winddirection_10m[0];
-
-  function setTile(id, date, percent, risk) {
-    const el = document.getElementById(id);
-
-    let cls = "low";
-    if (percent > 80) cls = "high";
-    else if (percent > 40) cls = "medium";
-
-    el.className = "tile " + cls;
-    el.innerHTML = `
-      <b>${date}</b><br>
-      ${percent}%<br>
-      ${risk}<br>
-      🌬️ ${wind} km/h<br>
-      🧭 ${dir}°
-    `;
-
-    el.onclick = () => {
-      document.querySelectorAll(".tile").forEach(t => t.classList.remove("active"));
-      el.classList.add("active");
-
-      simulateFlight(baseLat, baseLon, wind, dir);
-    };
-  }
-
-  setTile("day1", "MAR 17", 10, "Low Risk");
-  setTile("day2", "MAR 18", 20, "Low Risk");
-  setTile("day3", "MAR 19", 30, "Low Risk");
-  setTile("day4", "MAR 24", 40, "Low Risk");
-  setTile("day5", "MAR 25", 90, "Very High Risk");
-  setTile("day6", "MAR 26", 70, "High Risk");
-  setTile("day7", "MAR 31", 60, "Medium Risk");
-  setTile("day8", "APR 1", 95, "Very High Risk");
-
-  simulateFlight(baseLat, baseLon, wind, dir);
+// data od dziś
+function getDate(i){
+  const d = new Date();
+  d.setDate(d.getDate()+i);
+  return d.toLocaleDateString("en-US",{month:"short",day:"numeric"}).toUpperCase();
 }
 
-function simulateFlight(lat, lon, wind, dir) {
-
-  if (polyline) map.removeLayer(polyline);
-  if (marker) map.removeLayer(marker);
-
-  let points = [];
-  let currentLat = lat;
-  let currentLon = lon;
-
-  for (let i = 0; i < 20; i++) {
-    currentLat += Math.cos(dir * Math.PI/180) * wind * 0.01;
-    currentLon += Math.sin(dir * Math.PI/180) * wind * 0.01;
-    points.push([currentLat, currentLon]);
+// losowy wiatr (symulacja API)
+function getWind(){
+  return {
+    speed:(Math.random()*20).toFixed(1),
+    dir:Math.floor(Math.random()*360)
   }
-
-  polyline = L.polyline(points, {color: 'red'}).addTo(map);
-
-  let i = 0;
-  marker = L.marker(points[0]).addTo(map);
-
-  let interval = setInterval(() => {
-    if (i >= points.length) return clearInterval(interval);
-    marker.setLatLng(points[i]);
-    i++;
-  }, 300);
-
-  map.fitBounds(polyline.getBounds());
 }
 
-document.addEventListener("DOMContentLoaded", () => {
+// ustaw kafelek
+function setTile(id, i, percent, location){
+  const el = document.getElementById(id);
 
-  map = L.map('map').setView([baseLat, baseLon], 7);
+  let cls = "low";
+  if(percent>80) cls="veryhigh";
+  else if(percent>60) cls="high";
+  else if(percent>40) cls="medium";
 
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+  const wind = getWind();
 
-  loadData();
+  el.className = "tile "+cls;
+  el.innerHTML = `
+    <b>${getDate(i)}</b><br>
+    ${percent}%<br>
+    ${cls.toUpperCase()} RISK<br><br>
+    📍 ${location.name}<br>
+    🌬️ ${wind.speed} km/h<br>
+    🧭 ${wind.dir}°
+  `;
 
-  // auto refresh co 60s
-  setInterval(loadData, 60000);
-});
+  el.onclick = ()=>{
+    map.setView([location.lat, location.lon],10);
+    L.marker([location.lat, location.lon]).addTo(map);
+  }
+}
+
+// dane
+setTile("day1",0,10,locations[0]);
+setTile("day2",1,20,locations[0]);
+setTile("day3",2,30,locations[0]);
+setTile("day4",3,40,locations[0]);
+setTile("day5",4,90,locations[1]);
+setTile("day6",5,70,locations[1]);
+setTile("day7",6,60,locations[1]);
+setTile("day8",7,95,locations[1]);
+
 </script>
 
 </body>
