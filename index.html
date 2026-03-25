@@ -108,6 +108,10 @@ async function check(lat, lon, el, name, target) {
     let dir = data.current.winddirection_10m;
 let speed = data.current.windspeed_10m;
 
+let risk = "LOW";
+let cls = "low";
+let color = "green";
+
 let targetDir = getDirection(lat, lon, target[0], target[1]);
 
 dir = (dir + 360) % 360;
