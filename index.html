@@ -37,19 +37,17 @@ h1 {
 
 .tile.low { background: #2ecc71; }
 .tile.medium { background: #f1c40f; }
-.tile.high { background: #e74c3c; }
+.tile.high { background: #e743c3; }
 
 .tile:hover { transform: scale(1.05); }
-
 .tile.active { outline: 3px solid white; }
 
 #map {
-  height: 300px;
+  height: 350px;
   margin: 20px;
   border-radius: 12px;
 }
 </style>
-
 </head>
 
 <body>
@@ -72,12 +70,14 @@ h1 {
 <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
 
 <script>
-document.addEventListener("DOMContentLoaded", async () => {
+let map, marker, polyline;
 
-  const lat = 52.3;
-  const lon = 23.5;
+const baseLat = 52.3;
+const baseLon = 23.5;
 
-  const res = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&hourly=windspeed_10m,winddirection_10m`);
+async function loadData() {
+
+  const res = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${baseLat}&longitude=${baseLon}&hourly=windspeed_10m,winddirection_10m`);
   const data = await res.json();
 
   const wind = data.hourly.windspeed_10m[0];
@@ -102,6 +102,8 @@ document.addEventListener("DOMContentLoaded", async () => {
     el.onclick = () => {
       document.querySelectorAll(".tile").forEach(t => t.classList.remove("active"));
       el.classList.add("active");
+
+      simulateFlight(baseLat, baseLon, wind, dir);
     };
   }
 
@@ -114,15 +116,48 @@ document.addEventListener("DOMContentLoaded", async () => {
   setTile("day7", "MAR 31", 60, "Medium Risk");
   setTile("day8", "APR 1", 95, "Very High Risk");
 
-  // MAPA
-  const map = L.map('map').setView([lat, lon], 7);
+  simulateFlight(baseLat, baseLon, wind, dir);
+}
+
+function simulateFlight(lat, lon, wind, dir) {
+
+  if (polyline) map.removeLayer(polyline);
+  if (marker) map.removeLayer(marker);
+
+  let points = [];
+  let currentLat = lat;
+  let currentLon = lon;
+
+  for (let i = 0; i < 20; i++) {
+    currentLat += Math.cos(dir * Math.PI/180) * wind * 0.01;
+    currentLon += Math.sin(dir * Math.PI/180) * wind * 0.01;
+    points.push([currentLat, currentLon]);
+  }
+
+  polyline = L.polyline(points, {color: 'red'}).addTo(map);
+
+  let i = 0;
+  marker = L.marker(points[0]).addTo(map);
+
+  let interval = setInterval(() => {
+    if (i >= points.length) return clearInterval(interval);
+    marker.setLatLng(points[i]);
+    i++;
+  }, 300);
+
+  map.fitBounds(polyline.getBounds());
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+
+  map = L.map('map').setView([baseLat, baseLon], 7);
 
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
 
-  L.marker([lat, lon]).addTo(map)
-    .bindPopup(`Wiatr: ${wind} km/h<br>Kierunek: ${dir}°`)
-    .openPopup();
+  loadData();
 
+  // auto refresh co 60s
+  setInterval(loadData, 60000);
 });
 </script>
 
