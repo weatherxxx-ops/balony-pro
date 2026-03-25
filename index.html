@@ -21,8 +21,7 @@ h1 { text-align:center; padding:20px; }
   padding:18px;
   border-radius:16px;
   text-align:center;
-  font-size:15px;
-  transition:0.3s;
+  cursor:pointer;
 }
 
 .tile.low { background:#2ecc71; }
@@ -30,9 +29,17 @@ h1 { text-align:center; padding:20px; }
 .tile.high { background:#e67e22; }
 .tile.veryhigh { background:#ff00aa; }
 
-.map {
-  height:300px;
-  margin:20px;
+.map { height:350px; margin:20px; }
+
+.wind-label {
+  position:absolute;
+  top:10px;
+  left:10px;
+  background:black;
+  padding:6px 10px;
+  border-radius:8px;
+  font-size:12px;
+  z-index:1000;
 }
 </style>
 </head>
@@ -53,21 +60,83 @@ h1 { text-align:center; padding:20px; }
 </div>
 
 <div id="map" class="map"></div>
+<div class="wind-label" id="windInfo">Kliknij kafelek</div>
 
 <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
 
 <script>
+
+// 📍 NOWE LOKALIZACJE
 const locations = [
-  { name:"Grodno–Białystok", lat:53.13, lon:23.16 },
-  { name:"Michałowo–Bobrowniki", lat:53.30, lon:23.65 }
+  { name:"Baranowicze → Białystok", lat:53.13, lon:26.01 },
+  { name:"Baranowicze → Sokółka", lat:53.13, lon:26.01 }
 ];
 
+let map = L.map('map').setView([53.2, 25.5], 7);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+
+let windParticles = [];
+let animation;
+
+// 🧹 czyszczenie
+function clearWind(){
+  windParticles.forEach(p => map.removeLayer(p));
+  windParticles = [];
+  if(animation) clearInterval(animation);
+}
+
+// 🌬️ FLOW (animacja jak windy)
+function startWindFlow(lat, lon, speed, dir){
+
+  clearWind();
+
+  for(let i=0;i<40;i++){
+    let x = lat + (Math.random()-0.5)*2;
+    let y = lon + (Math.random()-0.5)*2;
+
+    const dot = L.circleMarker([x,y], {
+      radius:2,
+      color:"white",
+      opacity:0.7
+    }).addTo(map);
+
+    windParticles.push(dot);
+  }
+
+  animation = setInterval(()=>{
+
+    windParticles.forEach(p=>{
+
+      let pos = p.getLatLng();
+
+      const move = speed * 0.002;
+
+      const newLat = pos.lat + Math.cos(dir*Math.PI/180)*move;
+      const newLon = pos.lng + Math.sin(dir*Math.PI/180)*move;
+
+      p.setLatLng([newLat, newLon]);
+
+      // reset jak wyjdzie poza obszar
+      if(Math.abs(newLat-lat)>2 || Math.abs(newLon-lon)>2){
+        p.setLatLng([
+          lat + (Math.random()-0.5)*2,
+          lon + (Math.random()-0.5)*2
+        ]);
+      }
+
+    });
+
+  }, 100);
+}
+
+// 📅
 function getDate(i){
   const d = new Date();
   d.setDate(d.getDate()+i);
   return d.toLocaleDateString("en-US",{month:"short",day:"numeric"}).toUpperCase();
 }
 
+// 🎯
 function calcRisk(speed){
   if(speed > 20) return "veryhigh";
   if(speed > 14) return "high";
@@ -75,13 +144,16 @@ function calcRisk(speed){
   return "low";
 }
 
+// 🌬️ API
 async function getWind(lat, lon){
   const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&hourly=windspeed_850hPa,windspeed_700hPa,winddirection_850hPa,winddirection_700hPa`;
   const res = await fetch(url);
   return await res.json();
 }
 
+// 🧱 kafelki
 async function setTile(id, i, location){
+
   const el = document.getElementById(id);
   const data = await getWind(location.lat, location.lon);
 
@@ -96,7 +168,6 @@ async function setTile(id, i, location){
   const dir = (d850 + d700) / 2;
 
   const cls = calcRisk(speed);
-
   el.className = "tile " + cls;
 
   el.innerHTML = `
@@ -107,25 +178,29 @@ async function setTile(id, i, location){
     💨 ${speed.toFixed(1)} km/h<br>
     🧭 ${Math.round(dir)}°
   `;
+
+  el.onclick = ()=>{
+    map.setView([location.lat, location.lon], 7);
+
+    startWindFlow(location.lat, location.lon, speed, dir);
+
+    document.getElementById("windInfo").innerHTML =
+      `1500–3500m<br>${speed.toFixed(1)} km/h | ${Math.round(dir)}°`;
+  }
 }
 
+// 🚀 INIT
 async function init(){
+
   for(let i=0;i<8;i++){
     const loc = i < 4 ? locations[0] : locations[1];
     await setTile("day"+(i+1), i, loc);
   }
+
 }
 
 init();
 
-// MAPA
-let map = L.map('map').setView([53.2, 23.4], 7);
-
-L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
-
-locations.forEach(l=>{
-  L.marker([l.lat,l.lon]).addTo(map).bindPopup(l.name);
-});
 </script>
 
 </body>
