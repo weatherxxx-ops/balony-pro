@@ -117,8 +117,8 @@ let cls = "low";
 let color = "green";
 
 let targetDir = getDirection(lat, lon, target[0], target[1]);
-    dir = (dir + 360) % 360;
 targetDir = (targetDir + 360) % 360;
+    dir = (dir + 360) % 360;
 
 let windTo = (dir + 180) % 360;
 
