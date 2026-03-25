@@ -114,8 +114,7 @@ async function check(lat, lon, el, name, target) {
     color = "red";
 
     let img = new Image();
-    img.src = `https://api.telegram.org/bot8631893584:AAHf9dnoKhnjc0TwQmBbaDYzG_1y1S2-fLQ/sendMessage?chat_id=2101099763&text=ALERT ${name}`;
-}
+img.src = `https://api.telegram.org/bot8631893584:AAHf9dnoKhnjc0TwQmBbaDYzG_1y1S2-fLQ/sendMessage?chat_id=2101099763&text=ALERT_${name}`;
     } else if (diff < 60 && speed > 3) {
         risk = "MEDIUM";
         cls = "medium";
