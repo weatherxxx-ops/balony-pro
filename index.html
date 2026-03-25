@@ -105,6 +105,10 @@ async function check(lat, lon, el, name, target) {
 
     let diff = Math.abs(dir - targetDir);
     if (diff > 180) diff = 360 - diff;
+    console.log("DIR:", dir);
+console.log("WIND TO:", windTo);
+console.log("TARGET:", targetDir);
+console.log("DIFF:", diff);
 
     if (diff < 30 && speed > 5 && !localStorage.getItem(name)) {
 
