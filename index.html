@@ -32,12 +32,24 @@ padding:20px;
 border-radius:16px;
 text-align:center;
 cursor:pointer;
+transition:0.3s;
+}
+
+.tile:hover{
+transform:scale(1.05);
+box-shadow:0 0 20px rgba(255,255,255,0.2);
 }
 
 .low{background:#2ecc71;}
 .medium{background:#f1c40f;}
 .high{background:#e67e22;}
 .veryhigh{background:#ff2ea6;}
+
+.badge{
+font-size:11px;
+opacity:0.7;
+margin-top:5px;
+}
 
 #report{
 margin:20px;
@@ -47,19 +59,13 @@ border-radius:15px;
 line-height:1.6;
 }
 
-.badge{
-font-size:11px;
-opacity:0.7;
-margin-top:5px;
-}
-
 .wrapper{
 display:flex;
 gap:10px;
 padding:20px;
 }
 
-#map{height:300px;flex:1;}
+#map{height:320px;flex:1;}
 </style>
 </head>
 
@@ -83,7 +89,8 @@ padding:20px;
 
 <div class="wrapper">
 <div id="map"></div>
-<iframe width="50%" height="300"
+
+<iframe width="50%" height="320"
 src="https://embed.windy.com/embed2.html?lat=53.2&lon=23.2&zoom=6&level=850h&overlay=wind&metricWind=km%2Fh">
 </iframe>
 </div>
@@ -95,6 +102,8 @@ src="https://embed.windy.com/embed2.html?lat=53.2&lon=23.2&zoom=6&level=850h&ove
 // ===== MAPA =====
 let map=L.map('map').setView([53.2,23.2],6);
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+
+let trajectoryLine=null;
 
 // ===== LOKACJE =====
 const locations=[
@@ -115,19 +124,21 @@ let x=Math.cos(lat1*Math.PI/180)*Math.sin(lat2*Math.PI/180)-Math.sin(lat1*Math.P
 return (Math.atan2(y,x)*180/Math.PI+360)%360;
 }
 
-// ===== HYBRYDA =====
-async function getWindHybrid(lat,lon){
+// ===== HYBRYDA + FIX =====
+async function getWindHybrid(lat,lon,i){
+
+let index=i*24;
 
 try{
 let res=await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&hourly=windspeed_850hPa,windspeed_700hPa,winddirection_850hPa,winddirection_700hPa`);
 let data=await res.json();
 
-if(data.hourly && data.hourly.windspeed_850hPa){
+if(data.hourly && data.hourly.windspeed_850hPa[index]){
 
-let s850=data.hourly.windspeed_850hPa[0];
-let s700=data.hourly.windspeed_700hPa[0];
-let d850=data.hourly.winddirection_850hPa[0];
-let d700=data.hourly.winddirection_700hPa[0];
+let s850=data.hourly.windspeed_850hPa[index];
+let s700=data.hourly.windspeed_700hPa[index];
+let d850=data.hourly.winddirection_850hPa[index];
+let d700=data.hourly.winddirection_700hPa[index];
 
 return {
 speed:(s850+s700)/2,
@@ -138,44 +149,47 @@ source:"REAL 1500–3000m"
 
 }catch{}
 
-// ===== FALLBACK =====
+// fallback
 let res=await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&hourly=windspeed_10m,winddirection_10m`);
 let data=await res.json();
 
 return {
-speed:data.hourly.windspeed_10m[0]*(1.8+Math.random()*0.4),
-dir:data.hourly.winddirection_10m[0],
+speed:data.hourly.windspeed_10m[index]*(1.8+Math.random()*0.3),
+dir:data.hourly.winddirection_10m[index],
 source:"FALLBACK"
 };
 
 }
 
-// ===== TREND =====
-function getTrend(current,prev){
-if(current>prev+2) return "📈 wzrost";
-if(current<prev-2) return "📉 spadek";
-return "➡️ stabilnie";
-}
-
-// ===== OKNO =====
-function getWindow(){
-let h=new Date().getHours();
-return (h>=17||h<=7) ? "AKTYWNE 🌙" : "NISKA AKTYWNOŚĆ ☀️";
-}
-
 // ===== ANALIZA =====
 function analyze(speed,dir,target){
-
 let diff=Math.abs(dir-target);
 if(diff>180) diff=360-diff;
 
-let status="";
+if(diff<45 && speed>18) return {status:"SPRZYJAJĄCE",diff};
+if(diff<90) return {status:"UMIARKOWANE",diff};
+return {status:"NIEKORZYSTNE",diff};
+}
 
-if(diff<45 && speed>18) status="SPRZYJAJĄCE";
-else if(diff<90) status="UMIARKOWANE";
-else status="NIEKORZYSTNE";
+// ===== TRAJEKTORIA =====
+function simulateTrajectory(lat,lon,dir,speed){
 
-return {diff,status};
+let points=[[lat,lon]];
+
+for(let i=0;i<10;i++){
+
+let dist=speed*100; // skala
+
+let newLat=lat + (dist*Math.cos(dir*Math.PI/180))/111000;
+let newLon=lon + (dist*Math.sin(dir*Math.PI/180))/(111000*Math.cos(lat*Math.PI/180));
+
+lat=newLat;
+lon=newLon;
+
+points.push([lat,lon]);
+}
+
+return points;
 }
 
 // ===== KAFELKI =====
@@ -183,7 +197,7 @@ async function setTile(id,i,loc){
 
 let el=document.getElementById(id);
 
-let wind=await getWindHybrid(loc.lat,loc.lon);
+let wind=await getWindHybrid(loc.lat,loc.lon,i);
 
 let target=getBearing(loc.lat,loc.lon,loc.targetLat,loc.targetLon);
 
@@ -199,17 +213,29 @@ ${a.status}<br>
 <div class="badge">${wind.source}</div>
 `;
 
+el.onclick=()=>{
+
+if(trajectoryLine) map.removeLayer(trajectoryLine);
+
+let points=simulateTrajectory(loc.lat,loc.lon,wind.dir,wind.speed);
+
+trajectoryLine=L.polyline(points,{color:"red"}).addTo(map);
+
+map.fitBounds(trajectoryLine.getBounds());
+
+};
+
 }
 
-// ===== PRASÓWKA =====
+// ===== RAPORT =====
 async function updateReport(){
 
 let loc=locations[0];
 
-let w1=await getWindHybrid(loc.lat,loc.lon);
-let w2=await getWindHybrid(loc.lat,loc.lon);
+let w1=await getWindHybrid(loc.lat,loc.lon,0);
+let w2=await getWindHybrid(loc.lat,loc.lon,1);
 
-let trend=getTrend(w1.speed,w2.speed);
+let trend = w1.speed > w2.speed ? "📈 wzrost" : "📉 spadek";
 
 let target=getBearing(loc.lat,loc.lon,loc.targetLat,loc.targetLon);
 
@@ -218,28 +244,19 @@ let a=analyze(w1.speed,w1.dir,target);
 document.getElementById("report").innerHTML=`
 <b>📊 RAPORT OPERACYJNY</b><br><br>
 
-<b>Status:</b> ${a.status}<br>
-<b>Trend:</b> ${trend}<br>
-<b>Okno:</b> ${getWindow()}<br>
-<b>Źródło danych:</b> ${w1.source}<br><br>
+Status: ${a.status}<br>
+Trend: ${trend}<br>
+Okno: ${(new Date().getHours()>=17||new Date().getHours()<=7)?"AKTYWNE 🌙":"NISKIE ☀️"}<br>
+Źródło: ${w1.source}<br><br>
 
-Odchylenie kierunku: ${Math.round(a.diff)}°<br>
-Prędkość: ${w1.speed.toFixed(1)} km/h<br><br>
-
-<b>Wniosek:</b> ${
-a.status==="SPRZYJAJĄCE"
-? "Warunki sprzyjają transportowi."
-: a.status==="UMIARKOWANE"
-? "Możliwy dryf boczny."
-: "Brak warunków sprzyjających."
-}
+Odchylenie: ${Math.round(a.diff)}°<br>
+Prędkość: ${w1.speed.toFixed(1)} km/h
 `;
 
 }
 
 // ===== START =====
-document.getElementById("update").innerText=
-"Ostatnia aktualizacja: "+new Date().toLocaleTimeString();
+document.getElementById("update").innerText="Aktualizacja: "+new Date().toLocaleTimeString();
 
 for(let i=0;i<8;i++){
 let loc=i<4?locations[0]:locations[1];
@@ -248,7 +265,6 @@ setTile("day"+(i+1),i,loc);
 
 updateReport();
 
-// AUTO REFRESH
 setInterval(()=>{
 updateReport();
 },300000);
