@@ -72,18 +72,14 @@ h1 {
 <h1>🌬️ Monitoring PRO</h1>
 
 <div class="grid">
-  <div class="tile low">MAR 17<br>0%<br>Low Risk</div>
-  <div class="tile low">MAR 18<br>0%<br>Low Risk</div>
-  <div class="tile low">MAR 19<br>0%<br>Low Risk</div>
-
-  <div class="tile low">MAR 24<br>0%<br>Low Risk</div>
-  <div class="tile high">MAR 25<br>98%<br>Very High Risk</div>
-  <div class="tile medium">MAR 26<br>78%<br>High Risk</div>
-
-  <div class="tile low">MAR 31<br>56%<br>Low Risk</div>
-  <div class="tile high">APR 1<br>93%<br>Very High Risk</div>
-</div>
-
+  <div id="day1" class="tile">Ładowanie...</div>
+<div id="day2" class="tile">Ładowanie...</div>
+<div id="day3" class="tile">Ładowanie...</div>
+<div id="day4" class="tile">Ładowanie...</div>
+<div id="day5" class="tile">Ładowanie...</div>
+<div id="day6" class="tile">Ładowanie...</div>
+<div id="day7" class="tile">Ładowanie...</div>
+<div id="day8" class="tile">Ładowanie...</div>
 <div id="map" class="map"></div>
 
 <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
@@ -93,78 +89,27 @@ let map = L.map('map').setView([52.3, 23.5], 6);
 
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
 
-let bialystok = [53.1325, 23.1688];
-let lublin = [51.2465, 22.5684];
+function setTile(id, date, percent, risk) {
+  const el = document.getElementById(id);
 
-function getDirection(fromLat, fromLon, toLat, toLon) {
-    const dLon = (toLon - fromLon) * Math.PI / 180;
-    const lat1 = fromLat * Math.PI / 180;
-    const lat2 = toLat * Math.PI / 180;
+  let cls = "low";
+  if (percent > 80) cls = "high";
+  else if (percent > 40) cls = "medium";
 
-    const y = Math.sin(dLon) * Math.cos(lat2);
-    const x = Math.cos(lat1) * Math.sin(lat2) -
-              Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLon);
+  el.className = "tile " + cls;
 
-    let brng = Math.atan2(y, x) * 180 / Math.PI;
-    return (brng + 360) % 360;
+  el.innerHTML = date + "<br>" + percent + "%<br>" + risk;
 }
 
-function drawLine(from, direction, speed, color) {
-    let distance = speed * 0.1;
-
-    let lat2 = from[0] + distance * Math.cos(direction * Math.PI/180);
-    let lon2 = from[1] + distance * Math.sin(direction * Math.PI/180);
-
-    L.polyline([from, [lat2, lon2]], {color: color}).addTo(map);
-}
-
-async function check(lat, lon, el, name, target) {
-    let res = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=winddirection_10m,windspeed_10m`);
-    let data = await res.json();
-
-    let dir = data.current.winddirection_10m;
-    let speed = data.current.windspeed_10m;
-
-    let risk = "LOW";
-    let cls = "low";
-    let color = "green";
-
-    dir = (dir + 360) % 360;
-
-    let targetDir = getDirection(lat, lon, target[0], target[1]);
-    targetDir = ((targetDir % 360) + 360) % 360;
-
-    let windTo = (dir + 180) % 360;
-
-    let diff = Math.abs(windTo - targetDir);
-    if (diff < 30 && speed > 5) {
-
-    risk = "HIGH";
-    cls = "high";
-    color = "red";
-
-    let img = new Image();
-img.src = `https://api.telegram.org/bot8631893584:AAHf9dnoKhnjc0TwQmBbaDYzG_1y1S2-fLQ/sendMessage?chat_id=2101099763&text=ALERT_${name}`;
-    } else if (diff < 60 && speed > 3) {
-        risk = "MEDIUM";
-        cls = "medium";
-        color = "orange";
-    }
-
-    document.getElementById(el).className = "card " + cls;
-    document.getElementById(el).innerHTML = `
-        <b>${name}</b><br>
-        Kierunek: ${dir}°<br>
-        Wiatr: ${speed} km/h<br>
-        <b>${risk}</b>
-    `;
-
-    drawLine([lat, lon], dir, speed, color);
-}
-
-check(53.6694, 23.8131, "grodno", "Grodno → Białystok", bialystok);
-check(52.0976, 23.7341, "brzesc", "Brześć → Lublin", lublin);
+// TEST
+setTile("day1", "MAR 17", 0, "Low Risk");
+setTile("day2", "MAR 18", 0, "Low Risk");
+setTile("day3", "MAR 19", 0, "Low Risk");
+setTile("day4", "MAR 24", 0, "Low Risk");
+setTile("day5", "MAR 25", 98, "Very High Risk");
+setTile("day6", "MAR 26", 78, "High Risk");
+setTile("day7", "MAR 31", 56, "Low Risk");
+setTile("day8", "APR 1", 93, "Very High Risk");
 </script>
-
 </body>
 </html>
