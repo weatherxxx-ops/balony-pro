@@ -1,6 +1,8 @@
 <!DOCTYPE html>
 <html>
 <head>
+<meta charset="UTF-8">
+<title>Monitoring PRO</title>
 
 <style>
 body {
@@ -21,12 +23,14 @@ h1 {
   gap: 15px;
   padding: 20px;
 }
+
 .tile {
   padding: 20px;
   border-radius: 16px;
   text-align: center;
   font-size: 16px;
   transition: 0.3s;
+  cursor: pointer;
 }
 
 .tile.low { background: #2ecc71; }
@@ -40,16 +44,10 @@ h1 {
 .tile.active {
   outline: 3px solid white;
 }
-
-.map {
-  height: 300px;
-  margin: 20px;
-}
 </style>
 
-<link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
-
 </head>
+
 <body>
 
 <h1>📡 Monitoring PRO</h1>
@@ -65,46 +63,36 @@ h1 {
   <div id="day8" class="tile">Ładowanie...</div>
 </div>
 
-<div id="map" class="map"></div>
 <script>
+document.addEventListener("DOMContentLoaded", () => {
 
-let map = L.map('map').setView([52.3, 23.5], 6);
+  function setTile(id, date, percent, risk) {
+    const el = document.getElementById(id);
 
-L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+    let cls = "low";
+    if (percent > 80) cls = "high";
+    else if (percent > 40) cls = "medium";
 
-// 🎯 funkcja ustawiająca kafelek
-function setTile(id, date, percent, risk) {
-  const el = document.getElementById(id);
+    el.className = "tile " + cls;
+    el.innerHTML = date + "<br>" + percent + "%<br>" + risk;
 
-  let cls = "low";
-  if (percent > 80) cls = "high";
-  else if (percent > 40) cls = "medium";
+    el.onclick = () => {
+      document.querySelectorAll(".tile").forEach(t => t.classList.remove("active"));
+      el.classList.add("active");
+    };
+  }
 
-  el.className = "tile " + cls;
+  setTile("day1", "MAR 17", 0, "Low Risk");
+  setTile("day2", "MAR 18", 0, "Low Risk");
+  setTile("day3", "MAR 19", 0, "Low Risk");
+  setTile("day4", "MAR 24", 0, "Low Risk");
+  setTile("day5", "MAR 25", 98, "Very High Risk");
+  setTile("day6", "MAR 26", 78, "High Risk");
+  setTile("day7", "MAR 31", 56, "Low Risk");
+  setTile("day8", "APR 1", 93, "Very High Risk");
 
-  el.innerHTML = `
-    <div class="tile-date">${date}</div>
-    <div class="tile-percent">${percent}%</div>
-    <div class="tile-risk">${risk}</div>
-  `;
-
-  // 🔥 klik = highlight + info w konsoli
-  el.onclick = () => {
-    document.querySelectorAll(".tile").forEach(t => t.classList.remove("active"));
-    el.classList.add("active");
-
-    console.log("Klik:", date, percent, risk);
-  };
-}
-
-// 📊 dane
-setTile("day1", "MAR 17", 0, "Low Risk");
-setTile("day2", "MAR 18", 0, "Low Risk");
-setTile("day3", "MAR 19", 0, "Low Risk");
-setTile("day4", "MAR 24", 0, "Low Risk");
-setTile("day5", "MAR 25", 98, "Very High Risk");
-setTile("day6", "MAR 26", 78, "High Risk");
-setTile("day7", "MAR 31", 56, "Low Risk");
-setTile("day8", "APR 1", 93, "Very High Risk");
-
+});
 </script>
+
+</body>
+</html>
