@@ -40,6 +40,28 @@ h1 {
     height: 300px;
     margin: 20px;
 }
+    .grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 15px;
+    padding: 20px;
+}
+
+.tile {
+    padding: 20px;
+    border-radius: 16px;
+    text-align: center;
+    font-size: 16px;
+    transition: 0.3s;
+}
+
+.tile.low { background: #2ecc71; }
+.tile.medium { background: #f1c40f; }
+.tile.high { background: #e74c3c; }
+
+.tile:hover {
+    transform: scale(1.05);
+}
 </style>
 
 <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
@@ -49,9 +71,17 @@ h1 {
 
 <h1>🌬️ Monitoring PRO</h1>
 
-<div class="container">
-    <div id="grodno" class="card">Ładowanie...</div>
-    <div id="brzesc" class="card">Ładowanie...</div>
+<div class="grid">
+  <div class="tile low">MAR 17<br>0%<br>Low Risk</div>
+  <div class="tile low">MAR 18<br>0%<br>Low Risk</div>
+  <div class="tile low">MAR 19<br>0%<br>Low Risk</div>
+
+  <div class="tile low">MAR 24<br>0%<br>Low Risk</div>
+  <div class="tile high">MAR 25<br>98%<br>Very High Risk</div>
+  <div class="tile medium">MAR 26<br>78%<br>High Risk</div>
+
+  <div class="tile low">MAR 31<br>56%<br>Low Risk</div>
+  <div class="tile high">APR 1<br>93%<br>Very High Risk</div>
 </div>
 
 <div id="map" class="map"></div>
