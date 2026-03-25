@@ -2,7 +2,7 @@
 <html lang="pl">
 <head>
 <meta charset="UTF-8">
-<title>Monitoring PRO</title>
+<title>Monitoring PRO – REAL</title>
 
 <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
 
@@ -21,7 +21,6 @@ h1 { text-align:center; padding:20px; }
   padding:18px;
   border-radius:16px;
   text-align:center;
-  transition:0.3s;
   cursor:pointer;
 }
 
@@ -30,15 +29,13 @@ h1 { text-align:center; padding:20px; }
 .tile.high { background:#e74c3c; }
 .tile.veryhigh { background:#ff00aa; }
 
-.tile:hover { transform:scale(1.05); }
-
-.map { height:350px; margin:20px; }
+.map { height:380px; margin:20px; }
 </style>
 </head>
 
 <body>
 
-<h1>🛰️ Monitoring PRO – Predykcja</h1>
+<h1>🛰️ Monitoring PRO – REAL</h1>
 
 <div class="grid">
   <div id="day1" class="tile">Ładowanie...</div>
@@ -64,24 +61,159 @@ const locations = [
 ];
 
 let map = L.map('map').setView([53.2, 23.3], 8);
-
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
 
-let polyline, markerStart, markerEnd;
+let polyline, impactMarker;
 
-// 📅 data
+// 📅
 function getDate(i){
   const d = new Date();
   d.setDate(d.getDate()+i);
   return d.toLocaleDateString("en-US",{month:"short",day:"numeric"}).toUpperCase();
 }
 
-// 🌬️ API wiatru
-async function getWind(lat, lon){
-  const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&hourly=windspeed_850hPa,winddirection_850hPa,windspeed_700hPa,winddirection_700hPa&forecast_days=1`;
+// 🌬️ API – więcej godzin
+async function getWindProfile(lat, lon){
+
+  const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&hourly=windspeed_850hPa,winddirection_850hPa,windspeed_700hPa,winddirection_700hPa&forecast_days=2`;
 
   const res = await fetch(url);
-  const data = await res.json();
+  return await res.json();
+}
 
-  const s = (data.hourly.windspeed_850hPa[0] + data.hourly.windspeed_700hPa[0]) / 2;
-  const d = (data.hourly.winddirection_850hPa[0] + data.hourly.winddirection_700hPa[0]) /
+// 📐 przesunięcie geograficzne (bardziej realne)
+function move(lat, lon, speed, dir, minutes){
+
+  const distance = speed * (minutes/60); // km
+  const R = 6371;
+
+  const brng = dir * Math.PI/180;
+  const d = distance / R;
+
+  const lat1 = lat * Math.PI/180;
+  const lon1 = lon * Math.PI/180;
+
+  const lat2 = Math.asin(
+    Math.sin(lat1)*Math.cos(d) +
+    Math.cos(lat1)*Math.sin(d)*Math.cos(brng)
+  );
+
+  const lon2 = lon1 + Math.atan2(
+    Math.sin(brng)*Math.sin(d)*Math.cos(lat1),
+    Math.cos(d)-Math.sin(lat1)*Math.sin(lat2)
+  );
+
+  return [
+    lat2*180/Math.PI,
+    lon2*180/Math.PI
+  ];
+}
+
+// 🧠 interpolacja wysokości
+function blend(a, b, factor){
+  return a + (b-a)*factor;
+}
+
+// 🚀 REALNA SYMULACJA
+async function simulateFlight(lat, lon){
+
+  if(polyline) map.removeLayer(polyline);
+  if(impactMarker) map.removeLayer(impactMarker);
+
+  const data = await getWindProfile(lat, lon);
+
+  let points = [[lat, lon]];
+
+  let currentLat = lat;
+  let currentLon = lon;
+
+  let timeStep = 30; // min
+  let totalTime = 0;
+
+  for(let i=0;i<24;i++){ // 12h symulacji
+
+    const s850 = data.hourly.windspeed_850hPa[i];
+    const s700 = data.hourly.windspeed_700hPa[i];
+    const d850 = data.hourly.winddirection_850hPa[i];
+    const d700 = data.hourly.winddirection_700hPa[i];
+
+    // mieszanie wysokości (balon "pływa")
+    const factor = Math.random(); 
+
+    const speed = blend(s850, s700, factor);
+    const dir = blend(d850, d700, factor);
+
+    const next = move(currentLat, currentLon, speed, dir, timeStep);
+
+    points.push(next);
+
+    currentLat = next[0];
+    currentLon = next[1];
+
+    totalTime += timeStep;
+  }
+
+  polyline = L.polyline(points, {color:'cyan'}).addTo(map);
+
+  impactMarker = L.marker([currentLat, currentLon]).addTo(map)
+    .bindPopup(`🎯 Upadek<br>Czas lotu: ${totalTime/60}h`)
+    .openPopup();
+
+  map.fitBounds(polyline.getBounds());
+}
+
+// 🎯 ryzyko
+function calcRisk(speed){
+  if(speed > 20) return "veryhigh";
+  if(speed > 14) return "high";
+  if(speed > 8) return "medium";
+  return "low";
+}
+
+// 🧱 kafelki
+async function setTile(id, i, location){
+
+  const el = document.getElementById(id);
+
+  const data = await getWindProfile(location.lat, location.lon);
+
+  const speed = data.hourly.windspeed_850hPa[0];
+  const dir = data.hourly.winddirection_850hPa[0];
+
+  const cls = calcRisk(speed);
+
+  el.className = "tile "+cls;
+
+  el.innerHTML = `
+    <b>${getDate(i)}</b><br>
+    ${Math.round(speed*3)}%<br>
+    ${cls.toUpperCase()} RISK<br><br>
+    📍 ${location.name}<br>
+    🌬️ ${speed.toFixed(1)} km/h<br>
+    🧭 ${Math.round(dir)}°
+  `;
+
+  el.onclick = ()=>{
+    simulateFlight(location.lat, location.lon);
+  }
+}
+
+// INIT
+async function init(){
+
+  for(let i=0;i<4;i++){
+    await setTile("day"+(i+1), i, locations[0]);
+  }
+
+  for(let i=4;i<8;i++){
+    await setTile("day"+(i+1), i, locations[1]);
+  }
+
+}
+
+init();
+
+</script>
+
+</body>
+</html>
