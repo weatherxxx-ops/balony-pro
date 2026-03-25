@@ -54,14 +54,13 @@ h1 { text-align:center; padding:10px; }
   font-size:12px;
   z-index:1000;
 }
-
 </style>
 </head>
 
 <body>
 
 <h1>🛰️ Monitoring PRO</h1>
-<div class="update" id="updateTime">Aktualizacja...</div>
+<div class="update" id="updateTime">Ładowanie danych...</div>
 
 <div class="grid">
   <div id="day1" class="tile">...</div>
@@ -88,6 +87,7 @@ W (270°) ←
 
 <script>
 
+// 🔥 lokalizacje
 const locations = [
   { name:"Baranowicze → Białystok", lat:53.13, lon:26.01 },
   { name:"Baranowicze → Sokółka", lat:53.13, lon:26.01 }
@@ -114,7 +114,7 @@ function clearWind(){
 function startWind(lat, lon, speed, dir){
   clearWind();
 
-  for(let i=0;i<50;i++){
+  for(let i=0;i<40;i++){
     let x = lat + (Math.random()-0.5)*2;
     let y = lon + (Math.random()-0.5)*2;
 
@@ -125,6 +125,7 @@ function startWind(lat, lon, speed, dir){
   animation = setInterval(()=>{
     windParticles.forEach(p=>{
       let pos = p.getLatLng();
+
       const move = speed * 0.002;
 
       let lat2 = pos.lat + Math.cos(dir*Math.PI/180)*move;
@@ -152,78 +153,103 @@ function calcRisk(speed){
   return "low";
 }
 
-// 🔥 NAJWAŻNIEJSZE – nocne godziny
+// 🔥 tylko noc (17–7)
 function getNightIndexes(times){
-  let indexes = [];
-
+  let indexes=[];
   times.forEach((t,i)=>{
-    const hour = new Date(t).getHours();
-    if(hour>=17 || hour<=7){
-      indexes.push(i);
-    }
+    const h = new Date(t).getHours();
+    if(h>=17 || h<=7) indexes.push(i);
   });
-
   return indexes;
 }
 
 async function getWind(lat, lon){
-  const res = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&hourly=windspeed_850hPa,windspeed_700hPa,winddirection_850hPa,winddirection_700hPa,time`);
+  const res = await fetch(
+    `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&hourly=windspeed_850hPa,windspeed_700hPa,winddirection_850hPa,winddirection_700hPa,time`
+  );
   return await res.json();
 }
 
+// 🔥 FIXED kafelki
 async function setTile(id,i,loc){
 
   const el = document.getElementById(id);
-  const data = await getWind(loc.lat, loc.lon);
 
-  const idxs = getNightIndexes(data.hourly.time);
+  try{
 
-  let speeds=[], dirs=[];
+    const data = await getWind(loc.lat, loc.lon);
 
-  idxs.forEach(idx=>{
-    const s = (data.hourly.windspeed_850hPa[idx] + data.hourly.windspeed_700hPa[idx]) / 2;
-    const d = (data.hourly.winddirection_850hPa[idx] + data.hourly.winddirection_700hPa[idx]) / 2;
+    if(!data.hourly) throw "Brak danych";
 
-    speeds.push(s);
-    dirs.push(d);
-  });
+    const idxs = getNightIndexes(data.hourly.time);
 
-  const speed = speeds.reduce((a,b)=>a+b,0)/speeds.length;
-  const dir = dirs.reduce((a,b)=>a+b,0)/dirs.length;
+    if(idxs.length === 0) throw "Brak godzin";
 
-  const cls = calcRisk(speed);
-  el.className = "tile "+cls;
+    let speeds=[], dirs=[];
 
-  el.innerHTML = `
-    <b>${getDate(i)}</b><br>
-    ${Math.round(speed*3)}%<br>
-    ${cls.toUpperCase()}<br>
-    ${loc.name}<br>
-    💨 ${speed.toFixed(1)} km/h<br>
-    🧭 ${Math.round(dir)}°
-  `;
+    idxs.forEach(idx=>{
+      const s850 = data.hourly.windspeed_850hPa[idx];
+      const s700 = data.hourly.windspeed_700hPa[idx];
+      const d850 = data.hourly.winddirection_850hPa[idx];
+      const d700 = data.hourly.winddirection_700hPa[idx];
 
-  el.onclick = ()=>{
-    document.querySelectorAll(".tile").forEach(t=>t.classList.remove("active"));
-    el.classList.add("active");
+      if(s850 && s700){
+        speeds.push((s850+s700)/2);
+        dirs.push((d850+d700)/2);
+      }
+    });
 
-    map.setView([loc.lat,loc.lon],7);
-    startWind(loc.lat,loc.lon,speed,dir);
+    if(speeds.length === 0) throw "Brak danych";
+
+    const speed = speeds.reduce((a,b)=>a+b,0)/speeds.length;
+    const dir = dirs.reduce((a,b)=>a+b,0)/dirs.length;
+
+    const cls = calcRisk(speed);
+
+    el.className = "tile "+cls;
+
+    el.innerHTML = `
+      <b>${getDate(i)}</b><br>
+      ${Math.round(speed*3)}%<br>
+      ${cls.toUpperCase()}<br>
+      ${loc.name}<br>
+      💨 ${speed.toFixed(1)} km/h<br>
+      🧭 ${Math.round(dir)}°
+    `;
+
+    el.onclick = ()=>{
+      document.querySelectorAll(".tile").forEach(t=>t.classList.remove("active"));
+      el.classList.add("active");
+
+      map.setView([loc.lat,loc.lon],7);
+      startWind(loc.lat,loc.lon,speed,dir);
+    };
+
+  } catch(e){
+
+    el.className="tile medium";
+    el.innerHTML=`
+      <b>${getDate(i)}</b><br>
+      BRAK DANYCH<br>
+      ${loc.name}
+    `;
+
+    console.error(e);
   }
 }
 
-async function init(){
+// 🔥 INIT BEZ await (ważne)
+function init(){
 
   updateTime();
 
   for(let i=0;i<8;i++){
     const loc = i<4 ? locations[0] : locations[1];
-    await setTile("day"+(i+1),i,loc);
+    setTile("day"+(i+1),i,loc);
   }
-
 }
 
-// auto refresh co 5 min
+// auto refresh
 setInterval(init,300000);
 
 init();
