@@ -1,66 +1,5 @@
 <!DOCTYPE html>
 <html>
-<head>
-<meta charset="UTF-8">
-<title>Monitoring PRO</title>
-
-<script>
-console.log("NOWA WERSJA");
-</script>
-
-<style>
-body {
-    margin: 0;
-    font-family: Arial;
-    background: #0b0f1a;
-    color: white;
-}
-
-h1 {
-    text-align: center;
-    padding: 20px;
-}
-
-.container {
-    display: flex;
-    justify-content: space-around;
-    flex-wrap: wrap;
-}
-
-.card {
-    width: 300px;
-    padding: 20px;
-    margin: 15px;
-    border-radius: 12px;
-    text-align: center;
-    font-size: 18px;
-}
-
-.low { background: #1f8f3a; }
-.medium { background: #c98a00; }
-.high { background: #c0392b; }
-
-.map {
-    height: 300px;
-    margin: 20px;
-}
-</style>
-
-</head>
-<body>
-
-<h1>🌬️ Monitoring PRO</h1>
-
-<div class="container">
-    <div id="grodno" class="card">Ładowanie...</div>
-    <div id="brzesc" class="card">Ładowanie...</div>
-</div>
-
-<div id="map" class="map"></div>
-
-<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
-<link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
-
 <script>
 let map = L.map('map').setView([52.3, 23.5], 6);
 
@@ -81,6 +20,7 @@ function drawLine(from, direction, speed, color) {
     L.polyline([from, [lat2, lon2]], {color: color}).addTo(map);
 }
 
+// 🔥 JEDNA poprawna funkcja
 function getDirection(fromLat, fromLon, toLat, toLon) {
     const dLon = (toLon - fromLon) * Math.PI / 180;
     const lat1 = fromLat * Math.PI / 180;
@@ -91,51 +31,34 @@ function getDirection(fromLat, fromLon, toLat, toLon) {
               Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLon);
 
     let brng = Math.atan2(y, x) * 180 / Math.PI;
-    return (brng + 360) % 360;
+    return (brng + 360) % 360; // ✅ zawsze 0–360
 }
-function getDirection(fromLat, fromLon, toLat, toLon) {
-    const dLon = (toLon - fromLon) * Math.PI / 180;
-    const lat1 = fromLat * Math.PI / 180;
-    const lat2 = toLat * Math.PI / 180;
 
-    const y = Math.sin(dLon) * Math.cos(lat2);
-    const x = Math.cos(lat1) * Math.sin(lat2) -
-              Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLon);
-
-    let brng = Math.atan2(y, x) * 180 / Math.PI;
-    return (brng + 360) % 360;
-}
 async function check(lat, lon, el, name, target) {
     let res = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=winddirection_10m,windspeed_10m`);
     let data = await res.json();
 
-    let dir = data.current.winddirection_10m;
-let speed = data.current.windspeed_10m;
+    let dir = (data.current.winddirection_10m + 360) % 360;
+    let speed = data.current.windspeed_10m;
+
     let risk = "LOW";
-let cls = "low";
-let color = "green";
+    let cls = "low";
+    let color = "green";
 
-dir = (dir + 360) % 360;
+    let targetDir = getDirection(lat, lon, target[0], target[1]);
 
-let targetDir = getDirection(lat, lon, target[0], target[1]);
+    let windTo = (dir + 180) % 360;
 
-console.log("RAW TARGET:", targetDir);
+    let diff = Math.abs(windTo - targetDir);
+    if (diff > 180) diff = 360 - diff;
 
-targetDir = ((targetDir % 360) + 360) % 360;
-
-console.log("FIXED TARGET:", targetDir);
-
-let windTo = (dir + 180) % 360;
-
-let diff = Math.abs(windTo - targetDir);
-if (diff > 180) diff = 360 - diff;
+    // 🔍 DEBUG
     console.log("DIR:", dir);
-console.log("WIND TO:", windTo);
-console.log("TARGET:", targetDir);
-console.log("DIFF:", diff);
+    console.log("WIND TO:", windTo);
+    console.log("TARGET:", targetDir);
+    console.log("DIFF:", diff);
 
     if (diff < 30 && speed > 5 && !localStorage.getItem(name)) {
-
         localStorage.setItem(name, "sent");
 
         risk = "HIGH";
@@ -144,15 +67,13 @@ console.log("DIFF:", diff);
 
         let img = new Image();
         img.src = `https://api.telegram.org/botTWÓJ_TOKEN/sendMessage?chat_id=TWÓJ_CHAT_ID&text=🚨 ALERT ${name}`;
-
-    } else if (diff < 60 && speed > 3) {
-
+    } 
+    else if (diff < 60 && speed > 3) {
         risk = "MEDIUM";
         cls = "medium";
         color = "orange";
     }
 
-    // 🔥 TO MUSI BYĆ W ŚRODKU FUNKCJI
     document.getElementById(el).className = "card " + cls;
     document.getElementById(el).innerHTML = `
         <b>${name}</b><br>
@@ -170,6 +91,4 @@ check(52.0976, 23.7341, "brzesc", "Brześć → Lublin", lublin);
 
 setInterval(() => location.reload(), 600000);
 </script>
-
-</body>
 </html>
