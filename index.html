@@ -111,6 +111,9 @@ async function check(lat, lon, el, name, target) {
 
     let dir = data.current.winddirection_10m;
 let speed = data.current.windspeed_10m;
+    let risk = "LOW";
+let cls = "low";
+let color = "green";
 
 dir = (dir + 360) % 360;
 
@@ -118,7 +121,7 @@ let targetDir = getDirection(lat, lon, target[0], target[1]);
 
 console.log("RAW TARGET:", targetDir);
 
-targetDir = (targetDir + 360) % 360;
+targetDir = ((targetDir % 360) + 360) % 360;
 
 console.log("FIXED TARGET:", targetDir);
 
