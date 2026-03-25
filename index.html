@@ -32,13 +32,13 @@ h1 { text-align:center; padding:20px; }
 
 .tile:hover { transform:scale(1.05); }
 
-.map { height:300px; margin:20px; }
+.map { height:350px; margin:20px; }
 </style>
 </head>
 
 <body>
 
-<h1>🛰️ Monitoring PRO</h1>
+<h1>🛰️ Monitoring PRO – Predykcja</h1>
 
 <div class="grid">
   <div id="day1" class="tile">Ładowanie...</div>
@@ -63,86 +63,25 @@ const locations = [
   { name: "Michałowo–Bobrowniki", lat:53.30, lon:23.65 }
 ];
 
-// 🗺️ mapa
 let map = L.map('map').setView([53.2, 23.3], 8);
 
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
 
-// 📅 daty
+let polyline, markerStart, markerEnd;
+
+// 📅 data
 function getDate(i){
   const d = new Date();
   d.setDate(d.getDate()+i);
   return d.toLocaleDateString("en-US",{month:"short",day:"numeric"}).toUpperCase();
 }
 
-// 🎯 ryzyko na podstawie wiatru
-function calcRisk(speed){
-  if(speed > 20) return {cls:"veryhigh", txt:"VERY HIGH RISK", val:90+Math.random()*10};
-  if(speed > 14) return {cls:"high", txt:"HIGH RISK", val:70+Math.random()*10};
-  if(speed > 8) return {cls:"medium", txt:"MEDIUM RISK", val:40+Math.random()*10};
-  return {cls:"low", txt:"LOW RISK", val:10+Math.random()*20};
-}
-
-// 🌬️ pobieranie wiatru (Open-Meteo – wysokości)
+// 🌬️ API wiatru
 async function getWind(lat, lon){
   const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&hourly=windspeed_850hPa,winddirection_850hPa,windspeed_700hPa,winddirection_700hPa&forecast_days=1`;
 
   const res = await fetch(url);
   const data = await res.json();
 
-  // średnia z 850 + 700 hPa
-  const s1 = data.hourly.windspeed_850hPa[0];
-  const s2 = data.hourly.windspeed_700hPa[0];
-  const d1 = data.hourly.winddirection_850hPa[0];
-  const d2 = data.hourly.winddirection_700hPa[0];
-
-  return {
-    speed: ((s1 + s2)/2).toFixed(1),
-    dir: Math.round((d1 + d2)/2)
-  };
-}
-
-// 🧱 ustaw kafelki
-async function setTile(id, i, location){
-  const el = document.getElementById(id);
-
-  const wind = await getWind(location.lat, location.lon);
-  const risk = calcRisk(wind.speed);
-
-  el.className = "tile "+risk.cls;
-  el.innerHTML = `
-    <b>${getDate(i)}</b><br>
-    ${Math.round(risk.val)}%<br>
-    ${risk.txt}<br><br>
-    📍 ${location.name}<br>
-    🌬️ ${wind.speed} km/h<br>
-    🧭 ${wind.dir}°
-  `;
-
-  el.onclick = ()=>{
-    map.setView([location.lat, location.lon],10);
-    L.marker([location.lat, location.lon]).addTo(map);
-  }
-}
-
-// 🚀 generowanie
-async function init(){
-
-  // pierwsze 4 dni – lokalizacja 1
-  for(let i=0;i<4;i++){
-    await setTile("day"+(i+1), i, locations[0]);
-  }
-
-  // kolejne 4 dni – lokalizacja 2
-  for(let i=4;i<8;i++){
-    await setTile("day"+(i+1), i, locations[1]);
-  }
-
-}
-
-init();
-
-</script>
-
-</body>
-</html>
+  const s = (data.hourly.windspeed_850hPa[0] + data.hourly.windspeed_700hPa[0]) / 2;
+  const d = (data.hourly.winddirection_850hPa[0] + data.hourly.winddirection_700hPa[0]) /
