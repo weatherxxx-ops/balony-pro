@@ -4,6 +4,8 @@
 <meta charset="UTF-8">
 <title>Monitoring PRO</title>
 
+<link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
+
 <style>
 body {
   margin: 0;
@@ -37,12 +39,14 @@ h1 {
 .tile.medium { background: #f1c40f; }
 .tile.high { background: #e74c3c; }
 
-.tile:hover {
-  transform: scale(1.05);
-}
+.tile:hover { transform: scale(1.05); }
 
-.tile.active {
-  outline: 3px solid white;
+.tile.active { outline: 3px solid white; }
+
+#map {
+  height: 300px;
+  margin: 20px;
+  border-radius: 12px;
 }
 </style>
 
@@ -63,8 +67,21 @@ h1 {
   <div id="day8" class="tile">Ładowanie...</div>
 </div>
 
+<div id="map"></div>
+
+<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+
 <script>
-document.addEventListener("DOMContentLoaded", () => {
+document.addEventListener("DOMContentLoaded", async () => {
+
+  const lat = 52.3;
+  const lon = 23.5;
+
+  const res = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&hourly=windspeed_10m,winddirection_10m`);
+  const data = await res.json();
+
+  const wind = data.hourly.windspeed_10m[0];
+  const dir = data.hourly.winddirection_10m[0];
 
   function setTile(id, date, percent, risk) {
     const el = document.getElementById(id);
@@ -74,7 +91,13 @@ document.addEventListener("DOMContentLoaded", () => {
     else if (percent > 40) cls = "medium";
 
     el.className = "tile " + cls;
-    el.innerHTML = date + "<br>" + percent + "%<br>" + risk;
+    el.innerHTML = `
+      <b>${date}</b><br>
+      ${percent}%<br>
+      ${risk}<br>
+      🌬️ ${wind} km/h<br>
+      🧭 ${dir}°
+    `;
 
     el.onclick = () => {
       document.querySelectorAll(".tile").forEach(t => t.classList.remove("active"));
@@ -82,14 +105,23 @@ document.addEventListener("DOMContentLoaded", () => {
     };
   }
 
-  setTile("day1", "MAR 17", 0, "Low Risk");
-  setTile("day2", "MAR 18", 0, "Low Risk");
-  setTile("day3", "MAR 19", 0, "Low Risk");
-  setTile("day4", "MAR 24", 0, "Low Risk");
-  setTile("day5", "MAR 25", 98, "Very High Risk");
-  setTile("day6", "MAR 26", 78, "High Risk");
-  setTile("day7", "MAR 31", 56, "Low Risk");
-  setTile("day8", "APR 1", 93, "Very High Risk");
+  setTile("day1", "MAR 17", 10, "Low Risk");
+  setTile("day2", "MAR 18", 20, "Low Risk");
+  setTile("day3", "MAR 19", 30, "Low Risk");
+  setTile("day4", "MAR 24", 40, "Low Risk");
+  setTile("day5", "MAR 25", 90, "Very High Risk");
+  setTile("day6", "MAR 26", 70, "High Risk");
+  setTile("day7", "MAR 31", 60, "Medium Risk");
+  setTile("day8", "APR 1", 95, "Very High Risk");
+
+  // MAPA
+  const map = L.map('map').setView([lat, lon], 7);
+
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+
+  L.marker([lat, lon]).addTo(map)
+    .bindPopup(`Wiatr: ${wind} km/h<br>Kierunek: ${dir}°`)
+    .openPopup();
 
 });
 </script>
