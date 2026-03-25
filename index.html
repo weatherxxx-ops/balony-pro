@@ -103,8 +103,10 @@ async function check(lat, lon, el, name, target) {
 
     let targetDir = getDirection(lat, lon, target[0], target[1]);
 
-    let diff = Math.abs(dir - targetDir);
-    if (diff > 180) diff = 360 - diff;
+let windTo = (dir + 180) % 360;   // 👈 TO MUSI BYĆ NAJPIERW
+
+let diff = Math.abs(windTo - targetDir);
+if (diff > 180) diff = 360 - diff;
     console.log("DIR:", dir);
 console.log("WIND TO:", windTo);
 console.log("TARGET:", targetDir);
