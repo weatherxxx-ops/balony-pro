@@ -17,6 +17,7 @@ background-size:cover;
 }
 
 h1{text-align:center;padding:20px;}
+
 #update{text-align:center;font-size:12px;opacity:0.7;}
 
 .grid{
@@ -31,13 +32,26 @@ padding:20px;
 border-radius:16px;
 text-align:center;
 cursor:pointer;
-transition:0.3s;
 }
 
 .low{background:#2ecc71;}
 .medium{background:#f1c40f;}
 .high{background:#e67e22;}
 .veryhigh{background:#ff2ea6;}
+
+#report{
+margin:20px;
+padding:20px;
+background:rgba(0,0,0,0.6);
+border-radius:15px;
+line-height:1.6;
+}
+
+.badge{
+font-size:11px;
+opacity:0.7;
+margin-top:5px;
+}
 
 .wrapper{
 display:flex;
@@ -46,9 +60,6 @@ padding:20px;
 }
 
 #map{height:300px;flex:1;}
-
-.arrow{font-size:20px;}
-.result{margin-top:5px;font-weight:bold;}
 </style>
 </head>
 
@@ -68,92 +79,34 @@ padding:20px;
 <div id="day8" class="tile"></div>
 </div>
 
+<div id="report">Ładowanie analizy...</div>
+
 <div class="wrapper">
 <div id="map"></div>
-
 <iframe width="50%" height="300"
 src="https://embed.windy.com/embed2.html?lat=53.2&lon=23.2&zoom=6&level=850h&overlay=wind&metricWind=km%2Fh">
 </iframe>
-
 </div>
 
 <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
 
 <script>
 
-// ================= MAPA =================
+// ===== MAPA =====
 let map=L.map('map').setView([53.2,23.2],6);
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
 
-// ================= LOKACJE =================
+// ===== LOKACJE =====
 const locations=[
 { name:"Baranowicze → Białystok", lat:53.13, lon:26.02, targetLat:53.13, targetLon:23.16 },
 { name:"Baranowicze → Sokółka", lat:53.13, lon:26.02, targetLat:53.41, targetLon:23.50 }
 ];
 
-// ================= TRACKER =================
-let trackerMarker;
-let trackLine=[];
-let polyline;
-
-// 🔥 TU PODŁĄCZYSZ PRAWDZIWY TRACKER
-async function getTracker(){
-try{
-/*
-PRZYKŁAD:
-let r=await fetch("https://twoje-api-tracker");
-let j=await r.json();
-return {lat:j.lat, lon:j.lon};
-*/
-
-// 🔴 NA RAZIE SYMULACJA
-return {
-lat:53.3 + (Math.random()-0.5)*0.5,
-lon:24 + (Math.random()-0.5)*0.5
-};
-
-}catch{
-return null;
-}
-}
-
-async function updateTracker(){
-
-let data=await getTracker();
-if(!data) return;
-
-let pos=[data.lat,data.lon];
-
-// marker
-if(!trackerMarker){
-trackerMarker=L.marker(pos).addTo(map).bindPopup("TRACKER LIVE");
-}else{
-trackerMarker.setLatLng(pos);
-}
-
-// ślad
-trackLine.push(pos);
-
-if(polyline) map.removeLayer(polyline);
-polyline=L.polyline(trackLine,{color:'red'}).addTo(map);
-
-}
-
-// update co 10 sek
-setInterval(updateTracker,10000);
-
-// ================= FUNKCJE =================
+// ===== FUNKCJE =====
 function getDate(i){
 let d=new Date();
 d.setDate(d.getDate()+i);
 return d.toLocaleDateString("pl-PL");
-}
-
-function getArrow(deg){
-if(deg<45||deg>=315) return "↑";
-if(deg<135) return "→";
-if(deg<225) return "↓";
-return "←";
 }
 
 function getBearing(lat1,lon1,lat2,lon2){
@@ -162,73 +115,129 @@ let x=Math.cos(lat1*Math.PI/180)*Math.sin(lat2*Math.PI/180)-Math.sin(lat1*Math.P
 return (Math.atan2(y,x)*180/Math.PI+360)%360;
 }
 
-function interpret(dir,target){
-let diff=Math.abs(dir-target);
-if(diff>180) diff=360-diff;
+// ===== HYBRYDA =====
+async function getWindHybrid(lat,lon){
 
-if(diff<30) return "TRAFIA 🎯";
-if(diff<60) return "BLISKO ⚠️";
-if(diff<120) return "ODCHYŁKA ❌";
-return "PRZECIWNIE ⛔";
-}
-
-function calcRisk(speed,dir,target){
-let diff=Math.abs(dir-target);
-if(diff>180) diff=360-diff;
-
-if(diff>90) return "low";
-if(diff>45) return "medium";
-
-if(speed>20) return "veryhigh";
-if(speed>14) return "high";
-return "medium";
-}
-
-function convert(s){
-return s*(1.8+Math.random()*0.5)*1.2;
-}
-
-async function getWind(lat,lon){
 try{
-let r=await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&hourly=windspeed_10m,winddirection_10m`);
-return await r.json();
-}catch{
-return{hourly:{windspeed_10m:[6+Math.random()*6],winddirection_10m:[Math.random()*360]}};
-}
+let res=await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&hourly=windspeed_850hPa,windspeed_700hPa,winddirection_850hPa,winddirection_700hPa`);
+let data=await res.json();
+
+if(data.hourly && data.hourly.windspeed_850hPa){
+
+let s850=data.hourly.windspeed_850hPa[0];
+let s700=data.hourly.windspeed_700hPa[0];
+let d850=data.hourly.winddirection_850hPa[0];
+let d700=data.hourly.winddirection_700hPa[0];
+
+return {
+speed:(s850+s700)/2,
+dir:(d850+d700)/2,
+source:"REAL 1500–3000m"
+};
 }
 
-// ================= KAFELKI =================
+}catch{}
+
+// ===== FALLBACK =====
+let res=await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&hourly=windspeed_10m,winddirection_10m`);
+let data=await res.json();
+
+return {
+speed:data.hourly.windspeed_10m[0]*(1.8+Math.random()*0.4),
+dir:data.hourly.winddirection_10m[0],
+source:"FALLBACK"
+};
+
+}
+
+// ===== TREND =====
+function getTrend(current,prev){
+if(current>prev+2) return "📈 wzrost";
+if(current<prev-2) return "📉 spadek";
+return "➡️ stabilnie";
+}
+
+// ===== OKNO =====
+function getWindow(){
+let h=new Date().getHours();
+return (h>=17||h<=7) ? "AKTYWNE 🌙" : "NISKA AKTYWNOŚĆ ☀️";
+}
+
+// ===== ANALIZA =====
+function analyze(speed,dir,target){
+
+let diff=Math.abs(dir-target);
+if(diff>180) diff=360-diff;
+
+let status="";
+
+if(diff<45 && speed>18) status="SPRZYJAJĄCE";
+else if(diff<90) status="UMIARKOWANE";
+else status="NIEKORZYSTNE";
+
+return {diff,status};
+}
+
+// ===== KAFELKI =====
 async function setTile(id,i,loc){
 
 let el=document.getElementById(id);
 
-let data=await getWind(loc.lat,loc.lon);
-
-let base=data.hourly.windspeed_10m[0];
-let dir=data.hourly.winddirection_10m[0];
-
-let speed=convert(base);
+let wind=await getWindHybrid(loc.lat,loc.lon);
 
 let target=getBearing(loc.lat,loc.lon,loc.targetLat,loc.targetLon);
 
-let cls=calcRisk(speed,dir,target);
-let result=interpret(dir,target);
+let a=analyze(wind.speed,wind.dir,target);
 
-el.className="tile "+cls;
+el.className="tile medium";
 
 el.innerHTML=`
 <b>${getDate(i)}</b><br>
-${cls.toUpperCase()}<br>
 ${loc.name}<br>
-💨 ${speed.toFixed(1)} km/h<br><br>
-WIATR: ${getArrow(dir)}<br>
-CEL: ${getArrow(target)}<br>
-<div class="result">${result}</div>
+💨 ${wind.speed.toFixed(1)} km/h<br>
+${a.status}<br>
+<div class="badge">${wind.source}</div>
 `;
 
 }
 
-// ================= START =================
+// ===== PRASÓWKA =====
+async function updateReport(){
+
+let loc=locations[0];
+
+let w1=await getWindHybrid(loc.lat,loc.lon);
+let w2=await getWindHybrid(loc.lat,loc.lon);
+
+let trend=getTrend(w1.speed,w2.speed);
+
+let target=getBearing(loc.lat,loc.lon,loc.targetLat,loc.targetLon);
+
+let a=analyze(w1.speed,w1.dir,target);
+
+document.getElementById("report").innerHTML=`
+<b>📊 RAPORT OPERACYJNY</b><br><br>
+
+<b>Status:</b> ${a.status}<br>
+<b>Trend:</b> ${trend}<br>
+<b>Okno:</b> ${getWindow()}<br>
+<b>Źródło danych:</b> ${w1.source}<br><br>
+
+Odchylenie kierunku: ${Math.round(a.diff)}°<br>
+Prędkość: ${w1.speed.toFixed(1)} km/h<br><br>
+
+<b>Wniosek:</b> ${
+a.status==="SPRZYJAJĄCE"
+? "Warunki sprzyjają transportowi."
+: a.status==="UMIARKOWANE"
+? "Możliwy dryf boczny."
+: "Brak warunków sprzyjających."
+}
+`;
+
+}
+
+// ===== START =====
 document.getElementById("update").innerText=
 "Ostatnia aktualizacja: "+new Date().toLocaleTimeString();
 
@@ -236,6 +245,13 @@ for(let i=0;i<8;i++){
 let loc=i<4?locations[0]:locations[1];
 setTile("day"+(i+1),i,loc);
 }
+
+updateReport();
+
+// AUTO REFRESH
+setInterval(()=>{
+updateReport();
+},300000);
 
 </script>
 
