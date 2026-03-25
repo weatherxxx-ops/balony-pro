@@ -3,49 +3,22 @@
 <head>
 <meta charset="UTF-8">
 <title>Monitoring PRO</title>
-
 <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
 
 <style>
-body { margin:0; font-family:Arial; background:#0b0f1a; color:white; }
-h1 { text-align:center; padding:20px; }
-
-#update { text-align:center; font-size:12px; opacity:0.7; }
-
-.grid {
-  display:grid;
-  grid-template-columns:repeat(3,1fr);
-  gap:15px;
-  padding:20px;
-}
-
-.tile {
-  padding:20px;
-  border-radius:16px;
-  text-align:center;
-  transition:0.3s;
-  cursor:pointer;
-}
-
-.tile:hover { transform:scale(1.05); }
-
-.low { background:#2ecc71; }
-.medium { background:#f1c40f; }
-.high { background:#e67e22; }
-.veryhigh { background:#ff2ea6; }
-
-.tile.active { outline:3px solid white; }
-
-#map { height:300px; margin:20px; }
-
-.legend {
-  position:absolute;
-  top:20px;
-  right:20px;
-  font-size:12px;
-  text-align:right;
-  opacity:0.8;
-}
+body{margin:0;font-family:Arial;background:#0b0f1a;color:white;}
+h1{text-align:center;padding:20px;}
+#update{text-align:center;font-size:12px;opacity:0.7;}
+.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:15px;padding:20px;}
+.tile{padding:20px;border-radius:16px;text-align:center;transition:0.3s;cursor:pointer;}
+.tile:hover{transform:scale(1.05);}
+.low{background:#2ecc71;}
+.medium{background:#f1c40f;}
+.high{background:#e67e22;}
+.veryhigh{background:#ff2ea6;}
+.tile.active{outline:3px solid white;}
+#map{height:300px;margin:20px;}
+.legend{position:absolute;top:20px;right:20px;font-size:12px;text-align:right;opacity:0.8;}
 </style>
 </head>
 
@@ -55,21 +28,18 @@ h1 { text-align:center; padding:20px; }
 <div id="update"></div>
 
 <div class="legend">
-N (0°)<br>
-E (90°)<br>
-S (180°)<br>
-W (270°)
+N (0°)<br>E (90°)<br>S (180°)<br>W (270°)
 </div>
 
 <div class="grid">
-<div id="day1" class="tile">...</div>
-<div id="day2" class="tile">...</div>
-<div id="day3" class="tile">...</div>
-<div id="day4" class="tile">...</div>
-<div id="day5" class="tile">...</div>
-<div id="day6" class="tile">...</div>
-<div id="day7" class="tile">...</div>
-<div id="day8" class="tile">...</div>
+<div id="day1" class="tile">Ładowanie...</div>
+<div id="day2" class="tile">Ładowanie...</div>
+<div id="day3" class="tile">Ładowanie...</div>
+<div id="day4" class="tile">Ładowanie...</div>
+<div id="day5" class="tile">Ładowanie...</div>
+<div id="day6" class="tile">Ładowanie...</div>
+<div id="day7" class="tile">Ładowanie...</div>
+<div id="day8" class="tile">Ładowanie...</div>
 </div>
 
 <div id="map"></div>
@@ -77,142 +47,94 @@ W (270°)
 <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
 
 <script>
-
-// 📍 lokalizacje
-const locations = [
- {name:"Baranowicze → Białystok", lat:53.13, lon:26.02},
- {name:"Baranowicze → Sokółka", lat:53.13, lon:26.02}
+const locations=[
+{name:"Baranowicze → Białystok",lat:53.13,lon:26.02},
+{name:"Baranowicze → Sokółka",lat:53.13,lon:26.02}
 ];
 
-// 🗺 mapa
-let map = L.map('map').setView([53.2,23.2],6);
+let map=L.map('map').setView([53.2,23.2],6);
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
 
 let windLayer;
 
-// 📅 daty
 function getDate(i){
-  const d = new Date();
-  d.setDate(d.getDate()+i);
-  return d.toLocaleDateString("pl-PL");
+let d=new Date();
+d.setDate(d.getDate()+i);
+return d.toLocaleDateString("pl-PL");
 }
 
-// 🎯 ryzyko
 function calcRisk(speed){
-  if(speed > 20) return "veryhigh";
-  if(speed > 14) return "high";
-  if(speed > 8) return "medium";
-  return "low";
+if(speed>20)return"veryhigh";
+if(speed>14)return"high";
+if(speed>8)return"medium";
+return"low";
 }
 
-// 🌬 API (850 + 700 hPa)
 async function getWind(lat,lon){
-  const res = await fetch(
-    `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&hourly=windspeed_850hPa,windspeed_700hPa,winddirection_850hPa,winddirection_700hPa,time`
-  );
-  return await res.json();
+let res=await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&hourly=windspeed_1000hPa,windspeed_925hPa,windspeed_850hPa,winddirection_1000hPa,winddirection_925hPa,winddirection_850hPa,time`);
+return await res.json();
 }
 
-// 🧠 KAFELKI (NAPRAWIONE)
 async function setTile(id,i,loc){
-
-  const el = document.getElementById(id);
-
-  try{
-
-    const data = await getWind(loc.lat,loc.lon);
-
-    const times = data.hourly.time;
-
-    let speeds=[], dirs=[];
-
-    times.forEach((t,idx)=>{
-
-      const date = new Date(t);
-      const hour = date.getHours();
-
-      // 🔥 tylko noc 17–7
-      if(hour >= 17 || hour <= 7){
-
-        const s850 = data.hourly.windspeed_850hPa[idx];
-        const s700 = data.hourly.windspeed_700hPa[idx];
-
-        const d850 = data.hourly.winddirection_850hPa[idx];
-        const d700 = data.hourly.winddirection_700hPa[idx];
-
-        if(s850 && s700){
-          speeds.push((s850 + s700)/2);
-          dirs.push((d850 + d700)/2);
-        }
-      }
-    });
-
-    if(speeds.length === 0){
-      el.className="tile medium";
-      el.innerHTML = `
-        <b>${getDate(i)}</b><br>
-        BRAK DANYCH<br>
-        ${loc.name}
-      `;
-      return;
-    }
-
-    const speed = speeds.reduce((a,b)=>a+b,0)/speeds.length;
-    const dir = dirs.reduce((a,b)=>a+b,0)/dirs.length;
-
-    const cls = calcRisk(speed);
-
-    el.className = "tile "+cls;
-
-    el.innerHTML = `
-      <b>${getDate(i)}</b><br>
-      ${Math.round(speed*3)}%<br>
-      ${cls.toUpperCase()}<br>
-      ${loc.name}<br>
-      💨 ${speed.toFixed(1)} km/h<br>
-      🧭 ${Math.round(dir)}°
-    `;
-
-    el.onclick = ()=>{
-      document.querySelectorAll(".tile").forEach(t=>t.classList.remove("active"));
-      el.classList.add("active");
-
-      map.setView([loc.lat,loc.lon],7);
-      startWind(loc.lat,loc.lon,speed,dir);
-    };
-
-  }catch(e){
-    el.innerHTML="ERROR";
-  }
+let el=document.getElementById(id);
+try{
+let data=await getWind(loc.lat,loc.lon);
+let speeds=[],dirs=[];
+data.hourly.time.forEach((t,idx)=>{
+let h=new Date(t).getHours();
+if(h>=17||h<=7){
+let s1=data.hourly.windspeed_1000hPa[idx];
+let s2=data.hourly.windspeed_925hPa[idx];
+let s3=data.hourly.windspeed_850hPa[idx];
+let d1=data.hourly.winddirection_1000hPa[idx];
+let d2=data.hourly.winddirection_925hPa[idx];
+let d3=data.hourly.winddirection_850hPa[idx];
+if(s1&&s2&&s3){
+speeds.push((s1+s2+s3)/3);
+dirs.push((d1+d2+d3)/3);
+}
+}
+});
+if(speeds.length===0){
+el.className="tile medium";
+el.innerHTML=`<b>${getDate(i)}</b><br>BRAK DANYCH<br>${loc.name}`;
+return;
+}
+let speed=speeds.reduce((a,b)=>a+b,0)/speeds.length;
+let dir=dirs.reduce((a,b)=>a+b,0)/dirs.length;
+let cls=calcRisk(speed);
+el.className="tile "+cls;
+el.innerHTML=`<b>${getDate(i)}</b><br>${Math.round(speed*3)}%<br>${cls.toUpperCase()}<br>${loc.name}<br>💨 ${speed.toFixed(1)} km/h<br>🧭 ${Math.round(dir)}°`;
+el.onclick=()=>{
+document.querySelectorAll(".tile").forEach(t=>t.classList.remove("active"));
+el.classList.add("active");
+map.setView([loc.lat,loc.lon],7);
+startWind(loc.lat,loc.lon,speed,dir);
+};
+}catch(e){
+el.className="tile high";
+el.innerHTML=`<b>${getDate(i)}</b><br>ERROR API<br>${loc.name}`;
+console.error(e);
+}
 }
 
-// 🌬 animacja
 function startWind(lat,lon,speed,dir){
-
-  if(windLayer) map.removeLayer(windLayer);
-
-  let points=[];
-  let x=lat;
-  let y=lon;
-
-  for(let i=0;i<30;i++){
-    x += Math.cos(dir*Math.PI/180)*0.1;
-    y += Math.sin(dir*Math.PI/180)*0.1;
-    points.push([x,y]);
-  }
-
-  windLayer = L.polyline(points,{color:'cyan'}).addTo(map);
+if(windLayer)map.removeLayer(windLayer);
+let pts=[],x=lat,y=lon;
+for(let i=0;i<40;i++){
+x+=Math.cos(dir*Math.PI/180)*0.1;
+y+=Math.sin(dir*Math.PI/180)*0.1;
+pts.push([x,y]);
+}
+windLayer=L.polyline(pts,{color:'cyan'}).addTo(map);
 }
 
-// 🚀 start
-document.getElementById("update").innerText =
-"Ostatnia aktualizacja: "+new Date().toLocaleTimeString();
+document.getElementById("update").innerText="Ostatnia aktualizacja: "+new Date().toLocaleTimeString();
 
 for(let i=0;i<8;i++){
-  const loc = i<4 ? locations[0] : locations[1];
-  setTile("day"+(i+1),i,loc);
+let loc=i<4?locations[0]:locations[1];
+setTile("day"+(i+1),i,loc);
 }
-
 </script>
 
 </body>
