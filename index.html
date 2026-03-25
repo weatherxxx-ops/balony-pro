@@ -1,3 +1,73 @@
+<!DOCTYPE html>
+<html>
+<head>
+
+<style>
+body {
+  margin: 0;
+  font-family: Arial;
+  background: #0b0f1a;
+  color: white;
+}
+
+h1 {
+  text-align: center;
+  padding: 20px;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 15px;
+  padding: 20px;
+}
+
+.tile {
+  padding: 20px;
+  border-radius: 16px;
+  text-align: center;
+  font-size: 16px;
+  transition: 0.3s;
+  cursor: pointer;
+}
+
+.tile.low { background: #2ecc71; }
+.tile.medium { background: #f1c40f; }
+.tile.high { background: #e74c3c; }
+
+.tile:hover {
+  transform: scale(1.05);
+}
+
+.tile.active {
+  outline: 3px solid white;
+}
+
+.map {
+  height: 300px;
+  margin: 20px;
+}
+</style>
+
+<link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
+
+</head>
+<body>
+
+<h1>📡 Monitoring PRO</h1>
+
+<div class="grid">
+  <div id="day1" class="tile">Ładowanie...</div>
+  <div id="day2" class="tile">Ładowanie...</div>
+  <div id="day3" class="tile">Ładowanie...</div>
+  <div id="day4" class="tile">Ładowanie...</div>
+  <div id="day5" class="tile">Ładowanie...</div>
+  <div id="day6" class="tile">Ładowanie...</div>
+  <div id="day7" class="tile">Ładowanie...</div>
+  <div id="day8" class="tile">Ładowanie...</div>
+</div>
+
+<div id="map" class="map"></div>
 <script>
 
 let map = L.map('map').setView([52.3, 23.5], 6);
