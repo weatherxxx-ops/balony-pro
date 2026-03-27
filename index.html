@@ -2,98 +2,68 @@
 <html>
 <head>
 <meta charset="UTF-8">
-<title>JETFLOW OPS</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>JETFLOW OPS PRO MAX+</title>
 
 <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
 
 <style>
-body{
-margin:0;
-font-family:Arial;
-color:white;
-background:linear-gradient(rgba(11,15,26,0.9), rgba(11,15,26,0.95)),
-url('https://images.unsplash.com/photo-1504198453319-5ce911bafcde');
-background-size:cover;
-}
-
-h1{text-align:center;padding:20px;}
-
-#update{text-align:center;font-size:12px;opacity:0.7;}
+body{margin:0;font-family:-apple-system;background:#0b0f1a;color:white;}
+.header{text-align:center;padding:15px;font-size:20px;background:#111;}
 
 .grid{
 display:grid;
-grid-template-columns:repeat(3,1fr);
-gap:15px;
-padding:20px;
+grid-template-columns:1fr 1fr;
+gap:10px;
+padding:10px;
 }
 
 .tile{
-padding:20px;
-border-radius:16px;
+padding:15px;
+border-radius:15px;
 text-align:center;
-cursor:pointer;
 transition:0.3s;
 }
 
-.tile:hover{
-transform:scale(1.05);
-box-shadow:0 0 20px rgba(255,255,255,0.2);
-}
+.tile:active{transform:scale(0.95);}
 
 .low{background:#2ecc71;}
 .medium{background:#f1c40f;}
 .high{background:#e67e22;}
 .veryhigh{background:#ff2ea6;}
 
-.badge{
-font-size:11px;
-opacity:0.7;
-margin-top:5px;
-}
+#map{height:340px;margin:10px;border-radius:15px;}
 
-#report{
-margin:20px;
-padding:20px;
-background:rgba(0,0,0,0.6);
-border-radius:15px;
-line-height:1.6;
+#alert{
+position:fixed;
+bottom:15px;
+left:10px;
+right:10px;
+background:red;
+padding:12px;
+border-radius:12px;
+text-align:center;
+display:none;
+font-weight:bold;
 }
-
-.wrapper{
-display:flex;
-gap:10px;
-padding:20px;
-}
-
-#map{height:320px;flex:1;}
 </style>
 </head>
 
 <body>
 
-<h1>🛰 JETFLOW OPS</h1>
-<div id="update"></div>
+<div class="header">🛰 JETFLOW OPS PRO MAX+</div>
 
 <div class="grid">
-<div id="day1" class="tile"></div>
-<div id="day2" class="tile"></div>
-<div id="day3" class="tile"></div>
-<div id="day4" class="tile"></div>
-<div id="day5" class="tile"></div>
-<div id="day6" class="tile"></div>
-<div id="day7" class="tile"></div>
-<div id="day8" class="tile"></div>
+<div id="t1" class="tile"></div>
+<div id="t2" class="tile"></div>
+<div id="t3" class="tile"></div>
+<div id="t4" class="tile"></div>
+<div id="t5" class="tile"></div>
+<div id="t6" class="tile"></div>
 </div>
 
-<div id="report">Ładowanie analizy...</div>
-
-<div class="wrapper">
 <div id="map"></div>
-
-<iframe width="50%" height="320"
-src="https://embed.windy.com/embed2.html?lat=53.2&lon=23.2&zoom=6&level=850h&overlay=wind&metricWind=km%2Fh">
-</iframe>
-</div>
+<div id="alert">🚨 STREFA WCHODZI W CEL</div>
 
 <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
 
@@ -103,171 +73,154 @@ src="https://embed.windy.com/embed2.html?lat=53.2&lon=23.2&zoom=6&level=850h&ove
 let map=L.map('map').setView([53.2,23.2],6);
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
 
-let trajectoryLine=null;
+let line=null;
+let zone=null;
 
-// ===== LOKACJE =====
-const locations=[
-{ name:"Baranowicze → Białystok", lat:53.13, lon:26.02, targetLat:53.13, targetLon:23.16 },
-{ name:"Baranowicze → Sokółka", lat:53.13, lon:26.02, targetLat:53.41, targetLon:23.50 }
+// ===== TRASY =====
+const routes=[
+{ name:"Baranowicze → Białystok", start:{lat:53.13,lon:26.02}, end:{lat:53.13,lon:23.16} },
+{ name:"Baranowicze → Sokółka", start:{lat:53.13,lon:26.02}, end:{lat:53.41,lon:23.50} },
+{ name:"Grodno → Sokółka", start:{lat:53.67,lon:23.83}, end:{lat:53.41,lon:23.50} }
 ];
 
-// ===== FUNKCJE =====
-function getDate(i){
-let d=new Date();
-d.setDate(d.getDate()+i);
-return d.toLocaleDateString("pl-PL");
-}
-
-function getBearing(lat1,lon1,lat2,lon2){
-let y=Math.sin((lon2-lon1)*Math.PI/180)*Math.cos(lat2*Math.PI/180);
-let x=Math.cos(lat1*Math.PI/180)*Math.sin(lat2*Math.PI/180)-Math.sin(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.cos((lon2-lon1)*Math.PI/180);
-return (Math.atan2(y,x)*180/Math.PI+360)%360;
-}
-
-// ===== HYBRYDA + FIX =====
-async function getWindHybrid(lat,lon,i){
-
-let index=i*24;
+// ===== API =====
+async function getWind(lat,lon,hour){
 
 try{
-let res=await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&hourly=windspeed_850hPa,windspeed_700hPa,winddirection_850hPa,winddirection_700hPa`);
-let data=await res.json();
+let r=await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&hourly=windspeed_850hPa,windspeed_700hPa,winddirection_850hPa,winddirection_700hPa`);
+let d=await r.json();
 
-if(data.hourly && data.hourly.windspeed_850hPa[index]){
-
-let s850=data.hourly.windspeed_850hPa[index];
-let s700=data.hourly.windspeed_700hPa[index];
-let d850=data.hourly.winddirection_850hPa[index];
-let d700=data.hourly.winddirection_700hPa[index];
-
-return {
-speed:(s850+s700)/2,
-dir:(d850+d700)/2,
-source:"REAL 1500–3000m"
+if(d.hourly && d.hourly.windspeed_850hPa[hour]){
+return{
+speed:(d.hourly.windspeed_850hPa[hour]+d.hourly.windspeed_700hPa[hour])/2,
+dir:(d.hourly.winddirection_850hPa[hour]+d.hourly.winddirection_700hPa[hour])/2,
+src:"REAL"
 };
 }
-
 }catch{}
 
 // fallback
-let res=await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&hourly=windspeed_10m,winddirection_10m`);
-let data=await res.json();
+let r=await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&hourly=windspeed_10m,winddirection_10m`);
+let d=await r.json();
 
-return {
-speed:data.hourly.windspeed_10m[index]*(1.8+Math.random()*0.3),
-dir:data.hourly.winddirection_10m[index],
-source:"FALLBACK"
+return{
+speed:d.hourly.windspeed_10m[hour]*2,
+dir:d.hourly.winddirection_10m[hour],
+src:"FALLBACK"
 };
 
 }
 
-// ===== ANALIZA =====
-function analyze(speed,dir,target){
-let diff=Math.abs(dir-target);
-if(diff>180) diff=360-diff;
-
-if(diff<45 && speed>18) return {status:"SPRZYJAJĄCE",diff};
-if(diff<90) return {status:"UMIARKOWANE",diff};
-return {status:"NIEKORZYSTNE",diff};
+// ===== ODLEGŁOŚĆ =====
+function dist(a,b,c,d){
+let R=6371;
+let dLat=(c-a)*Math.PI/180;
+let dLon=(d-b)*Math.PI/180;
+let x=Math.sin(dLat/2)**2+
+Math.cos(a*Math.PI/180)*Math.cos(c*Math.PI/180)*
+Math.sin(dLon/2)**2;
+return 2*R*Math.atan2(Math.sqrt(x),Math.sqrt(1-x));
 }
 
-// ===== TRAJEKTORIA =====
-function simulateTrajectory(lat,lon,dir,speed){
+// ===== TRAJEKTORIA CZASOWA =====
+async function simulate(route){
 
-let points=[[lat,lon]];
+let pts=[];
+let pos={...route.start};
 
-for(let i=0;i<10;i++){
+pts.push([pos.lat,pos.lon]);
 
-let dist=speed*100; // skala
+for(let h=0;h<12;h++){
 
-let newLat=lat + (dist*Math.cos(dir*Math.PI/180))/111000;
-let newLon=lon + (dist*Math.sin(dir*Math.PI/180))/(111000*Math.cos(lat*Math.PI/180));
+let w=await getWind(pos.lat,pos.lon,h);
 
-lat=newLat;
-lon=newLon;
+let move=w.speed*0.3;
 
-points.push([lat,lon]);
+pos.lat+=move*Math.cos(w.dir*Math.PI/180)/100;
+pos.lon+=move*Math.sin(w.dir*Math.PI/180)/100;
+
+pts.push([pos.lat,pos.lon]);
 }
 
-return points;
+return pts;
 }
 
-// ===== KAFELKI =====
-async function setTile(id,i,loc){
+// ===== STREFA SPADKU =====
+function drawZone(point){
+
+let radius=30000; // 30 km
+
+return L.circle(point,{
+radius:radius,
+color:"red",
+fillColor:"red",
+fillOpacity:0.2
+});
+}
+
+// ===== KLASY =====
+function cls(speed){
+if(speed>25) return "veryhigh";
+if(speed>18) return "high";
+if(speed>10) return "medium";
+return "low";
+}
+
+// ===== ALERT =====
+function alertOn(){
+let el=document.getElementById("alert");
+el.style.display="block";
+setTimeout(()=>el.style.display="none",4000);
+}
+
+// ===== TILE =====
+async function setTile(id,route,i){
 
 let el=document.getElementById(id);
 
-let wind=await getWindHybrid(loc.lat,loc.lon,i);
+let w=await getWind(route.start.lat,route.start.lon,i*24);
 
-let target=getBearing(loc.lat,loc.lon,loc.targetLat,loc.targetLon);
-
-let a=analyze(wind.speed,wind.dir,target);
-
-el.className="tile medium";
+el.className="tile "+cls(w.speed);
 
 el.innerHTML=`
-<b>${getDate(i)}</b><br>
-${loc.name}<br>
-💨 ${wind.speed.toFixed(1)} km/h<br>
-${a.status}<br>
-<div class="badge">${wind.source}</div>
+<b>${route.name}</b><br>
+Dzień ${i+1}<br>
+💨 ${w.speed.toFixed(1)} km/h<br>
+${w.src}
 `;
 
-el.onclick=()=>{
+el.onclick=async()=>{
 
-if(trajectoryLine) map.removeLayer(trajectoryLine);
+if(line) map.removeLayer(line);
+if(zone) map.removeLayer(zone);
 
-let points=simulateTrajectory(loc.lat,loc.lon,wind.dir,wind.speed);
+let pts=await simulate(route);
 
-trajectoryLine=L.polyline(points,{color:"red"}).addTo(map);
+line=L.polyline(pts,{color:"red"}).addTo(map);
 
-map.fitBounds(trajectoryLine.getBounds());
+let last=pts[pts.length-1];
+
+// strefa spadku
+zone=drawZone(last).addTo(map);
+
+map.fitBounds(line.getBounds());
+
+// sprawdzenie celu
+let d=dist(last[0],last[1],route.end.lat,route.end.lon);
+
+if(d<30) alertOn();
 
 };
-
-}
-
-// ===== RAPORT =====
-async function updateReport(){
-
-let loc=locations[0];
-
-let w1=await getWindHybrid(loc.lat,loc.lon,0);
-let w2=await getWindHybrid(loc.lat,loc.lon,1);
-
-let trend = w1.speed > w2.speed ? "📈 wzrost" : "📉 spadek";
-
-let target=getBearing(loc.lat,loc.lon,loc.targetLat,loc.targetLon);
-
-let a=analyze(w1.speed,w1.dir,target);
-
-document.getElementById("report").innerHTML=`
-<b>📊 RAPORT OPERACYJNY</b><br><br>
-
-Status: ${a.status}<br>
-Trend: ${trend}<br>
-Okno: ${(new Date().getHours()>=17||new Date().getHours()<=7)?"AKTYWNE 🌙":"NISKIE ☀️"}<br>
-Źródło: ${w1.source}<br><br>
-
-Odchylenie: ${Math.round(a.diff)}°<br>
-Prędkość: ${w1.speed.toFixed(1)} km/h
-`;
 
 }
 
 // ===== START =====
-document.getElementById("update").innerText="Aktualizacja: "+new Date().toLocaleTimeString();
-
-for(let i=0;i<8;i++){
-let loc=i<4?locations[0]:locations[1];
-setTile("day"+(i+1),i,loc);
-}
-
-updateReport();
-
-setInterval(()=>{
-updateReport();
-},300000);
+setTile("t1",routes[0],0);
+setTile("t2",routes[0],1);
+setTile("t3",routes[1],0);
+setTile("t4",routes[1],1);
+setTile("t5",routes[2],0);
+setTile("t6",routes[2],1);
 
 </script>
 
