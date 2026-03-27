@@ -2,7 +2,6 @@
 <!--
 JETFLOW OPS AI
 ©️ 2026 Adriano / weatherxxx
-All rights reserved.
 -->
 <html>
 <head>
@@ -74,39 +73,16 @@ right:10px;
 font-size:11px;
 opacity:0.4;
 }
-
-/* LOGIN */
-#loginScreen{
-position:fixed;
-top:0;
-left:0;
-width:100%;
-height:100%;
-background:#0b0f1a;
-display:flex;
-flex-direction:column;
-justify-content:center;
-align-items:center;
-z-index:9999;
-}
 </style>
 </head>
 
 <body>
 
-<!-- LOGIN -->
-<div id="loginScreen">
-<h2>🔒 Dostęp chroniony</h2>
-<input id="login" placeholder="Login" style="padding:10px;margin:5px;border-radius:8px;border:none;text-align:center;">
-<input id="pass" type="password" placeholder="Hasło" style="padding:10px;margin:5px;border-radius:8px;border:none;text-align:center;">
-<button onclick="checkLogin()" style="padding:10px 20px;border:none;border-radius:8px;background:#ff2ea6;color:white;">Zaloguj</button>
-<p id="error" style="color:red;"></p>
-</div>
-
 <div class="header">🛰 JETFLOW OPS AI</div>
 <div id="time"></div>
 
 <div class="grid" id="grid"></div>
+
 <div id="report"></div>
 
 <div class="maps">
@@ -114,35 +90,12 @@ z-index:9999;
 <iframe src="https://embed.windy.com/embed2.html?lat=53.2&lon=23.2&zoom=6&level=850h&overlay=wind"></iframe>
 </div>
 
-<div id="alert">🚨 TRAFIA W CEL</div>
+<div id="alert">🚨 REALNE TRAFIENIE</div>
 <div id="signature">JETFLOW OPS AI • by weatherxxx</div>
 
 <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
 
 <script>
-
-// 🔒 BLOKADA
-document.addEventListener('contextmenu', e => e.preventDefault());
-
-// LOGIN
-const LOGIN = "PsgBobrowniki";
-const PASSWORD = "!Bobrowniki1";
-
-function checkLogin(){
-let l=document.getElementById("login").value;
-let p=document.getElementById("pass").value;
-
-if(l===LOGIN && p===PASSWORD){
-document.getElementById("loginScreen").style.display="none";
-localStorage.setItem("auth","ok");
-}else{
-document.getElementById("error").innerText="Błędne dane";
-}
-}
-
-if(localStorage.getItem("auth")==="ok"){
-document.getElementById("loginScreen").style.display="none";
-}
 
 // MAP
 let map=L.map('map').setView([53.2,23.2],6);
@@ -150,19 +103,19 @@ L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
 
 let line=null, zone=null;
 
-// ROUTES
 const routes=[
 { name:"Baranowicze → Białystok", start:{lat:53.13,lon:26.02}, end:{lat:53.13,lon:23.16} },
 { name:"Baranowicze → Sokółka", start:{lat:53.13,lon:26.02}, end:{lat:53.41,lon:23.50} },
 { name:"Grodno → Sokółka", start:{lat:53.67,lon:23.83}, end:{lat:53.41,lon:23.50} }
 ];
 
-// TIME
+// TIME AUTO
 setInterval(()=>{
 let n=new Date();
 document.getElementById("time").innerText=n.toLocaleString("pl-PL");
 },1000);
 
+// DATE
 function getDate(i){
 let d=new Date();
 d.setDate(d.getDate()+i);
@@ -171,14 +124,13 @@ return d.toLocaleDateString("pl-PL");
 
 // WIND
 async function getWind(lat,lon,h){
-try{
 let r=await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&hourly=windspeed_850hPa,windspeed_700hPa,winddirection_850hPa,winddirection_700hPa`);
 let d=await r.json();
 return{
 speed:(d.hourly.windspeed_850hPa[h]+d.hourly.windspeed_700hPa[h])/2,
-dir:(d.hourly.winddirection_850hPa[h]+d.hourly.winddirection_700hPa[h])/2
+dir:(d.hourly.winddirection_850hPa[h]+d.hourly.winddirection_700hPa[h])/2,
+src:"REAL"
 };
-}catch{return{speed:10,dir:180};}
 }
 
 // DIR
@@ -188,25 +140,29 @@ if(target<0) target+=360;
 let diff=Math.abs(windDir-target);
 if(diff>180) diff=360-diff;
 
-if(diff<25) return "🎯";
-if(diff<60) return "⚠";
-return "⛔";
+if(diff<20) return {txt:"TRAFIA",score:1};
+if(diff<45) return {txt:"ODCHYŁKA",score:0.5};
+return {txt:"PRZECIWNIE",score:0};
 }
 
-// SCORE
-function score(speed,dir){
+// SCORE (POPRAWIONY)
+function score(speed,dirScore){
 let s=0;
-if(speed>25)s+=50;
-else if(speed>18)s+=35;
-else if(speed>10)s+=20;
-if(dir==="🎯")s+=50;
-if(dir==="⚠")s+=25;
-return s;
+
+if(speed>25) s+=50;
+else if(speed>18) s+=35;
+else if(speed>12) s+=25;
+else if(speed>8) s+=10;
+
+s += dirScore*50;
+
+return Math.round(s);
 }
 
 // TRAJECTORY
 async function simulate(route){
 let pts=[],pos={...route.start};
+
 for(let h=0;h<10;h++){
 let w=await getWind(pos.lat,pos.lon,h);
 pos.lat+=w.speed*0.003*Math.cos(w.dir*Math.PI/180);
@@ -216,15 +172,14 @@ pts.push([pos.lat,pos.lon]);
 return pts;
 }
 
-// ALERT
-function alertOn(){
-let el=document.getElementById("alert");
-el.style.display="block";
-setTimeout(()=>el.style.display="none",4000);
+// ALERT (POPRAWIONY)
+function shouldAlert(score,dir){
+return score>70 && dir==="TRAFIA";
 }
 
 // TILES
 async function buildTiles(){
+
 let grid=document.getElementById("grid");
 grid.innerHTML="";
 
@@ -232,22 +187,47 @@ for(let i=0;i<5;i++){
 for(let r of routes){
 
 let w=await getWind(r.start.lat,r.start.lon,i*24);
+
 let d=dirStatus(w.dir,r);
-let sc=score(w.speed,d);
+let sc=score(w.speed,d.score);
+
+// 🔥 KOLORY WRÓCIŁY
+let color="low";
+if(sc>75) color="veryhigh";
+else if(sc>55) color="high";
+else if(sc>30) color="medium";
 
 let tile=document.createElement("div");
-tile.className="tile medium";
+tile.className="tile "+color;
 
 tile.innerHTML=`
 <b>${r.name}</b><br>
 ${getDate(i)}<br>
-💨 ${w.speed.toFixed(0)}<br>
-${d} ${sc}%
+💨 ${w.speed.toFixed(1)} km/h<br>
+${d.txt}<br>
+📊 ${sc}%
 `;
 
 tile.onclick=async()=>{
+
+if(line) map.removeLayer(line);
+if(zone) map.removeLayer(zone);
+
 let pts=await simulate(r);
-line=L.polyline(pts).addTo(map);
+
+line=L.polyline(pts,{color:"red"}).addTo(map);
+
+let last=pts[pts.length-1];
+
+zone=L.circle(last,{radius:30000,color:"red",fillOpacity:0.25}).addTo(map);
+
+map.fitBounds(line.getBounds());
+
+if(shouldAlert(sc,d.txt)){
+let el=document.getElementById("alert");
+el.style.display="block";
+setTimeout(()=>el.style.display="none",4000);
+}
 };
 
 grid.appendChild(tile);
@@ -255,12 +235,21 @@ grid.appendChild(tile);
 }
 }
 
-// AI REPORT
+// RAPORT (PRZYWRÓCONY)
 async function updateReport(){
+
+let w=await getWind(53.13,26.02,0);
+let d=dirStatus(w.dir,routes[0]);
+let sc=score(w.speed,d.score);
+
 document.getElementById("report").innerHTML=`
-<b>🧠 RAPORT</b><br>
-System aktywny<br>
-Auto aktualizacja: TAK
+<b>🧠 RAPORT OPERACYJNY</b><br><br>
+Status: ${sc>70?"SPRZYJAJĄCE":"NIE"}<br>
+Wiatr: ${w.speed.toFixed(1)} km/h<br>
+Kierunek: ${d.txt}<br>
+Źródło: ${w.src}<br>
+Trend: ${(w.speed>18)?"ROSNĄCY":"SŁABY"}<br>
+Okno: ${(new Date().getHours()>=17||new Date().getHours()<=7)?"AKTYWNE 🌙":"NISKIE ☀️"}
 `;
 }
 
