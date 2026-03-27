@@ -10,25 +10,25 @@
 <style>
 body{margin:0;font-family:-apple-system;background:#0b0f1a;color:white;}
 
-.header{text-align:center;padding:10px;font-size:18px;background:#111;}
-#time{text-align:center;font-size:12px;opacity:0.7;margin-bottom:5px;}
+.header{text-align:center;padding:8px;font-size:16px;background:#111;}
+#time{text-align:center;font-size:11px;opacity:0.7;margin-bottom:5px;}
 
 .grid{
 display:grid;
-grid-template-columns:repeat(3, 1fr);
-gap:8px;
-padding:8px;
+grid-template-columns:repeat(3,1fr);
+gap:5px;
+padding:5px;
 }
 
 .tile{
-padding:10px;
-border-radius:12px;
+padding:7px;
+border-radius:10px;
 text-align:center;
-font-size:12px;
-line-height:1.4;
+font-size:10.5px;
+line-height:1.25;
 transition:0.2s;
 }
-.tile:hover{transform:scale(1.05);}
+.tile:hover{transform:scale(1.04);}
 
 .low{background:#2ecc71;}
 .medium{background:#f1c40f;}
@@ -36,21 +36,21 @@ transition:0.2s;
 .veryhigh{background:#ff2ea6;}
 
 #report{
-margin:8px;
+margin:6px;
 padding:10px;
-border-radius:12px;
+border-radius:10px;
 background:#1c1f2b;
-font-size:13px;
+font-size:12px;
 }
 
 .maps{
 display:flex;
-gap:8px;
-padding:8px;
+gap:6px;
+padding:6px;
 }
 
-#map{height:220px;flex:1;border-radius:12px;}
-iframe{flex:1;height:220px;border:none;border-radius:12px;}
+#map{height:200px;flex:1;border-radius:10px;}
+iframe{flex:1;height:200px;border:none;border-radius:10px;}
 
 #alert{
 position:fixed;
@@ -63,7 +63,6 @@ border-radius:10px;
 display:none;
 text-align:center;
 font-weight:bold;
-font-size:14px;
 }
 </style>
 </head>
@@ -88,20 +87,20 @@ font-size:14px;
 
 <script>
 
-// MAP
+// ===== MAP =====
 let map=L.map('map').setView([53.2,23.2],6);
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
 
 let line=null, zone=null;
 
-// ROUTES
+// ===== ROUTES =====
 const routes=[
-{ name:"B→BIA", start:{lat:53.13,lon:26.02}, end:{lat:53.13,lon:23.16} },
-{ name:"B→SOK", start:{lat:53.13,lon:26.02}, end:{lat:53.41,lon:23.50} },
-{ name:"G→SOK", start:{lat:53.67,lon:23.83}, end:{lat:53.41,lon:23.50} }
+{ name:"Baranowicze → Białystok", start:{lat:53.13,lon:26.02}, end:{lat:53.13,lon:23.16} },
+{ name:"Baranowicze → Sokółka", start:{lat:53.13,lon:26.02}, end:{lat:53.41,lon:23.50} },
+{ name:"Grodno → Sokółka", start:{lat:53.67,lon:23.83}, end:{lat:53.41,lon:23.50} }
 ];
 
-// TIME
+// ===== TIME =====
 function updateTime(){
 let n=new Date();
 document.getElementById("time").innerText=
@@ -116,7 +115,7 @@ d.setDate(d.getDate()+i);
 return d.toLocaleDateString("pl-PL");
 }
 
-// WIND
+// ===== WIND =====
 async function getWind(lat,lon,h){
 try{
 let r=await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&hourly=windspeed_850hPa,windspeed_700hPa,winddirection_850hPa,winddirection_700hPa`);
@@ -129,8 +128,10 @@ src:"REAL"
 };
 }
 }catch{}
+
 let r=await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&hourly=windspeed_10m,winddirection_10m`);
 let d=await r.json();
+
 return{
 speed:d.hourly.windspeed_10m[h]*2,
 dir:d.hourly.winddirection_10m[h],
@@ -138,55 +139,88 @@ src:"FALLBACK"
 };
 }
 
-// DIRECTION
+// ===== DIRECTION =====
 function dirStatus(windDir,route){
 let target=Math.atan2(route.end.lon-route.start.lon,route.end.lat-route.start.lat)*(180/Math.PI);
 if(target<0) target+=360;
 let diff=Math.abs(windDir-target);
 if(diff>180) diff=360-diff;
-if(diff<25) return "🎯";
-if(diff<60) return "⚠";
-return "⛔";
+
+if(diff<25) return "🎯 TRAFIA";
+if(diff<60) return "⚠ ODCHYŁKA";
+return "⛔ PRZECIWNIE";
 }
 
-// SCORE
+// ===== SCORE =====
 function score(speed,dir){
 let s=0;
 if(speed>25) s+=50;
 else if(speed>18) s+=35;
 else if(speed>10) s+=20;
-if(dir==="🎯") s+=50;
-if(dir==="⚠") s+=25;
+
+if(dir.includes("TRAFIA")) s+=50;
+if(dir.includes("ODCHYŁKA")) s+=25;
+
 return Math.min(s,100);
 }
 
-// TRAJECTORY
+// ===== AI =====
+async function aiPrediction(){
+
+let total=0,count=0;
+
+for(let h=17;h<=23;h++){
+let w=await getWind(53.13,26.02,h);
+total+=w.speed; count++;
+}
+for(let h=0;h<=7;h++){
+let w=await getWind(53.13,26.02,h);
+total+=w.speed; count++;
+}
+
+let avg=total/count;
+
+if(avg>22) return {txt:"🚀 WYSOKIE",score:90};
+if(avg>16) return {txt:"⚠ MOŻLIWE",score:60};
+return {txt:"❌ BRAK",score:20};
+}
+
+// ===== TRAJECTORY =====
 async function simulate(route){
+
 let pts=[];
 let pos={...route.start};
-for(let h=0;h<10;h++){
+
+for(let h=0;h<12;h++){
+
 let w=await getWind(pos.lat,pos.lon,h);
+
 let move=w.speed*0.3;
+
 pos.lat+=move*Math.cos(w.dir*Math.PI/180)/100;
 pos.lon+=move*Math.sin(w.dir*Math.PI/180)/100;
+
 pts.push([pos.lat,pos.lon]);
 }
+
 return pts;
 }
 
-// ALERT
+// ===== ALERT =====
 function alertOn(){
 let el=document.getElementById("alert");
 el.style.display="block";
 setTimeout(()=>el.style.display="none",4000);
 }
 
-// TILES
+// ===== TILES =====
 async function buildTiles(){
+
 let grid=document.getElementById("grid");
 grid.innerHTML="";
 
 for(let i=0;i<5;i++){
+
 for(let r of routes){
 
 let w=await getWind(r.start.lat,r.start.lon,i*24);
@@ -205,7 +239,8 @@ tile.innerHTML=`
 <b>${r.name}</b><br>
 ${getDate(i)}<br>
 💨 ${w.speed.toFixed(0)} km/h<br>
-${d} ${sc}%
+${d}<br>
+📊 ${sc}%
 `;
 
 tile.onclick=async()=>{
@@ -214,10 +249,16 @@ if(line) map.removeLayer(line);
 if(zone) map.removeLayer(zone);
 
 let pts=await simulate(r);
+
 line=L.polyline(pts,{color:"red"}).addTo(map);
 
 let last=pts[pts.length-1];
-zone=L.circle(last,{radius:30000,color:"red",fillOpacity:0.2}).addTo(map);
+
+zone=L.circle(last,{
+radius:30000,
+color:"red",
+fillOpacity:0.25
+}).addTo(map);
 
 map.fitBounds(line.getBounds());
 
@@ -234,20 +275,24 @@ grid.appendChild(tile);
 }
 }
 
-// REPORT
+// ===== REPORT =====
 async function updateReport(){
-let w=await getWind(routes[0].start.lat,routes[0].start.lon,0);
-let d=dirStatus(w.dir,routes[0]);
-let sc=score(w.speed,d);
+
+let pred=await aiPrediction();
+
+let w=await getWind(53.13,26.02,0);
 
 document.getElementById("report").innerHTML=`
-<b>📊 RAPORT</b><br>
-Status: ${sc>70?"SPRZYJAJĄCE":"BRAK"}<br>
-Score: ${sc}%<br>
+<b>🧠 RAPORT OPERACYJNY</b><br><br>
+Start dziś: ${pred.txt}<br>
+AI Score: ${pred.score}%<br>
+Wiatr: ${w.speed.toFixed(1)} km/h<br>
+Źródło: ${w.src}<br>
+Okno: ${(new Date().getHours()>=17||new Date().getHours()<=7)?"AKTYWNE 🌙":"NISKIE ☀️"}
 `;
 }
 
-// INIT
+// ===== INIT =====
 function loadAll(){
 buildTiles();
 updateReport();
