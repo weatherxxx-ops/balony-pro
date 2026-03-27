@@ -1,4 +1,10 @@
 <!DOCTYPE html>
+<!--
+JETFLOW OPS AI
+©️ 2026 Adriano / weatherxxx
+All rights reserved.
+Unauthorized use prohibited.
+-->
 <html>
 <head>
 <meta charset="UTF-8">
@@ -54,7 +60,7 @@ iframe{flex:1;height:200px;border:none;border-radius:10px;}
 
 #alert{
 position:fixed;
-bottom:10px;
+bottom:40px;
 left:10px;
 right:10px;
 background:red;
@@ -63,6 +69,15 @@ border-radius:10px;
 display:none;
 text-align:center;
 font-weight:bold;
+}
+
+/* PODPIS */
+#signature{
+position:fixed;
+bottom:5px;
+right:10px;
+font-size:11px;
+opacity:0.4;
 }
 </style>
 </head>
@@ -83,24 +98,33 @@ font-weight:bold;
 
 <div id="alert">🚨 TRAFIA W CEL</div>
 
+<div id="signature">JETFLOW OPS AI • by weatherxxx</div>
+
 <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
 
 <script>
 
-// ===== MAP =====
+// 🔒 BLOKADA KOPIOWANIA
+document.addEventListener('contextmenu', e => e.preventDefault());
+document.onkeydown = function(e){
+if(e.keyCode==123) return false;
+if(e.ctrlKey && e.key=='u') return false;
+};
+
+// MAP
 let map=L.map('map').setView([53.2,23.2],6);
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
 
 let line=null, zone=null;
 
-// ===== ROUTES =====
+// ROUTES
 const routes=[
 { name:"Baranowicze → Białystok", start:{lat:53.13,lon:26.02}, end:{lat:53.13,lon:23.16} },
 { name:"Baranowicze → Sokółka", start:{lat:53.13,lon:26.02}, end:{lat:53.41,lon:23.50} },
 { name:"Grodno → Sokółka", start:{lat:53.67,lon:23.83}, end:{lat:53.41,lon:23.50} }
 ];
 
-// ===== TIME =====
+// TIME
 function updateTime(){
 let n=new Date();
 document.getElementById("time").innerText=
@@ -115,7 +139,7 @@ d.setDate(d.getDate()+i);
 return d.toLocaleDateString("pl-PL");
 }
 
-// ===== WIND =====
+// WIND
 async function getWind(lat,lon,h){
 try{
 let r=await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&hourly=windspeed_850hPa,windspeed_700hPa,winddirection_850hPa,winddirection_700hPa`);
@@ -128,10 +152,8 @@ src:"REAL"
 };
 }
 }catch{}
-
 let r=await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&hourly=windspeed_10m,winddirection_10m`);
 let d=await r.json();
-
 return{
 speed:d.hourly.windspeed_10m[h]*2,
 dir:d.hourly.winddirection_10m[h],
@@ -139,7 +161,7 @@ src:"FALLBACK"
 };
 }
 
-// ===== DIRECTION =====
+// DIR
 function dirStatus(windDir,route){
 let target=Math.atan2(route.end.lon-route.start.lon,route.end.lat-route.start.lat)*(180/Math.PI);
 if(target<0) target+=360;
@@ -151,7 +173,7 @@ if(diff<60) return "⚠ ODCHYŁKA";
 return "⛔ PRZECIWNIE";
 }
 
-// ===== SCORE =====
+// SCORE
 function score(speed,dir){
 let s=0;
 if(speed>25) s+=50;
@@ -164,9 +186,8 @@ if(dir.includes("ODCHYŁKA")) s+=25;
 return Math.min(s,100);
 }
 
-// ===== AI =====
+// AI
 async function aiPrediction(){
-
 let total=0,count=0;
 
 for(let h=17;h<=23;h++){
@@ -185,42 +206,34 @@ if(avg>16) return {txt:"⚠ MOŻLIWE",score:60};
 return {txt:"❌ BRAK",score:20};
 }
 
-// ===== TRAJECTORY =====
+// TRAJECTORY
 async function simulate(route){
-
 let pts=[];
 let pos={...route.start};
 
 for(let h=0;h<12;h++){
-
 let w=await getWind(pos.lat,pos.lon,h);
-
 let move=w.speed*0.3;
-
 pos.lat+=move*Math.cos(w.dir*Math.PI/180)/100;
 pos.lon+=move*Math.sin(w.dir*Math.PI/180)/100;
-
 pts.push([pos.lat,pos.lon]);
 }
-
 return pts;
 }
 
-// ===== ALERT =====
+// ALERT
 function alertOn(){
 let el=document.getElementById("alert");
 el.style.display="block";
 setTimeout(()=>el.style.display="none",4000);
 }
 
-// ===== TILES =====
+// TILES
 async function buildTiles(){
-
 let grid=document.getElementById("grid");
 grid.innerHTML="";
 
 for(let i=0;i<5;i++){
-
 for(let r of routes){
 
 let w=await getWind(r.start.lat,r.start.lon,i*24);
@@ -244,7 +257,6 @@ ${d}<br>
 `;
 
 tile.onclick=async()=>{
-
 if(line) map.removeLayer(line);
 if(zone) map.removeLayer(zone);
 
@@ -254,11 +266,7 @@ line=L.polyline(pts,{color:"red"}).addTo(map);
 
 let last=pts[pts.length-1];
 
-zone=L.circle(last,{
-radius:30000,
-color:"red",
-fillOpacity:0.25
-}).addTo(map);
+zone=L.circle(last,{radius:30000,color:"red",fillOpacity:0.25}).addTo(map);
 
 map.fitBounds(line.getBounds());
 
@@ -275,11 +283,9 @@ grid.appendChild(tile);
 }
 }
 
-// ===== REPORT =====
+// REPORT
 async function updateReport(){
-
 let pred=await aiPrediction();
-
 let w=await getWind(53.13,26.02,0);
 
 document.getElementById("report").innerHTML=`
@@ -287,12 +293,11 @@ document.getElementById("report").innerHTML=`
 Start dziś: ${pred.txt}<br>
 AI Score: ${pred.score}%<br>
 Wiatr: ${w.speed.toFixed(1)} km/h<br>
-Źródło: ${w.src}<br>
-Okno: ${(new Date().getHours()>=17||new Date().getHours()<=7)?"AKTYWNE 🌙":"NISKIE ☀️"}
+Źródło: ${w.src}
 `;
 }
 
-// ===== INIT =====
+// INIT
 function loadAll(){
 buildTiles();
 updateReport();
