@@ -3,13 +3,15 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>JETFLOW OPS PRO MAX+</title>
+<title>JETFLOW OPS ULTRA</title>
 
 <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
 
 <style>
 body{margin:0;font-family:-apple-system;background:#0b0f1a;color:white;}
 .header{text-align:center;padding:15px;font-size:20px;background:#111;}
+
+#time{text-align:center;font-size:13px;opacity:0.7;}
 
 .grid{
 display:grid;
@@ -25,14 +27,27 @@ text-align:center;
 transition:0.3s;
 }
 
-.tile:active{transform:scale(0.95);}
-
 .low{background:#2ecc71;}
 .medium{background:#f1c40f;}
 .high{background:#e67e22;}
 .veryhigh{background:#ff2ea6;}
 
-#map{height:340px;margin:10px;border-radius:15px;}
+#report{
+margin:10px;
+padding:15px;
+border-radius:15px;
+background:#1c1f2b;
+}
+
+.maps{
+display:flex;
+gap:10px;
+padding:10px;
+}
+
+#map{height:260px;flex:1;border-radius:15px;}
+
+iframe{flex:1;height:260px;border-radius:15px;border:none;}
 
 #alert{
 position:fixed;
@@ -42,16 +57,16 @@ right:10px;
 background:red;
 padding:12px;
 border-radius:12px;
-text-align:center;
 display:none;
-font-weight:bold;
+text-align:center;
 }
 </style>
 </head>
 
 <body>
 
-<div class="header">🛰 JETFLOW OPS PRO MAX+</div>
+<div class="header">🛰 JETFLOW OPS ULTRA</div>
+<div id="time"></div>
 
 <div class="grid">
 <div id="t1" class="tile"></div>
@@ -62,8 +77,14 @@ font-weight:bold;
 <div id="t6" class="tile"></div>
 </div>
 
+<div id="report"></div>
+
+<div class="maps">
 <div id="map"></div>
-<div id="alert">🚨 STREFA WCHODZI W CEL</div>
+<iframe src="https://embed.windy.com/embed2.html?lat=53.2&lon=23.2&zoom=6&level=850h&overlay=wind"></iframe>
+</div>
+
+<div id="alert">🚨 ZAGROŻENIE – TRAFIA W CEL</div>
 
 <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
 
@@ -75,6 +96,8 @@ L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
 
 let line=null;
 let zone=null;
+let tracker=null;
+let heatPoints=[];
 
 // ===== TRASY =====
 const routes=[
@@ -83,52 +106,47 @@ const routes=[
 { name:"Grodno → Sokółka", start:{lat:53.67,lon:23.83}, end:{lat:53.41,lon:23.50} }
 ];
 
+// ===== CZAS =====
+function updateTime(){
+let n=new Date();
+document.getElementById("time").innerText=
+n.toLocaleDateString()+" | "+n.toLocaleTimeString();
+}
+setInterval(updateTime,1000);
+updateTime();
+
 // ===== API =====
-async function getWind(lat,lon,hour){
+async function getWind(lat,lon,h){
 
 try{
 let r=await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&hourly=windspeed_850hPa,windspeed_700hPa,winddirection_850hPa,winddirection_700hPa`);
 let d=await r.json();
 
-if(d.hourly && d.hourly.windspeed_850hPa[hour]){
+if(d.hourly && d.hourly.windspeed_850hPa[h]){
 return{
-speed:(d.hourly.windspeed_850hPa[hour]+d.hourly.windspeed_700hPa[hour])/2,
-dir:(d.hourly.winddirection_850hPa[hour]+d.hourly.winddirection_700hPa[hour])/2,
+speed:(d.hourly.windspeed_850hPa[h]+d.hourly.windspeed_700hPa[h])/2,
+dir:(d.hourly.winddirection_850hPa[h]+d.hourly.winddirection_700hPa[h])/2,
 src:"REAL"
 };
 }
 }catch{}
 
-// fallback
 let r=await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&hourly=windspeed_10m,winddirection_10m`);
 let d=await r.json();
 
 return{
-speed:d.hourly.windspeed_10m[hour]*2,
-dir:d.hourly.winddirection_10m[hour],
+speed:d.hourly.windspeed_10m[h]*2,
+dir:d.hourly.winddirection_10m[h],
 src:"FALLBACK"
 };
 
 }
 
-// ===== ODLEGŁOŚĆ =====
-function dist(a,b,c,d){
-let R=6371;
-let dLat=(c-a)*Math.PI/180;
-let dLon=(d-b)*Math.PI/180;
-let x=Math.sin(dLat/2)**2+
-Math.cos(a*Math.PI/180)*Math.cos(c*Math.PI/180)*
-Math.sin(dLon/2)**2;
-return 2*R*Math.atan2(Math.sqrt(x),Math.sqrt(1-x));
-}
-
-// ===== TRAJEKTORIA CZASOWA =====
+// ===== TRAJEKTORIA =====
 async function simulate(route){
 
 let pts=[];
 let pos={...route.start};
-
-pts.push([pos.lat,pos.lon]);
 
 for(let h=0;h<12;h++){
 
@@ -140,30 +158,40 @@ pos.lat+=move*Math.cos(w.dir*Math.PI/180)/100;
 pos.lon+=move*Math.sin(w.dir*Math.PI/180)/100;
 
 pts.push([pos.lat,pos.lon]);
+
+heatPoints.push([pos.lat,pos.lon,0.5]);
 }
 
 return pts;
 }
 
-// ===== STREFA SPADKU =====
-function drawZone(point){
+// ===== HEATMAP (prosta symulacja) =====
+function drawHeat(){
 
-let radius=30000; // 30 km
-
-return L.circle(point,{
-radius:radius,
-color:"red",
-fillColor:"red",
-fillOpacity:0.2
+heatPoints.forEach(p=>{
+L.circle([p[0],p[1]],{
+radius:8000,
+color:"orange",
+fillOpacity:0.1
+}).addTo(map);
 });
+
 }
 
-// ===== KLASY =====
-function cls(speed){
-if(speed>25) return "veryhigh";
-if(speed>18) return "high";
-if(speed>10) return "medium";
-return "low";
+// ===== GPS TRACKER =====
+function startGPS(){
+
+let lat=53.13;
+let lon=26.02;
+
+tracker=L.marker([lat,lon]).addTo(map).bindPopup("LIVE GPS");
+
+setInterval(()=>{
+lat+=0.02;
+lon-=0.04;
+tracker.setLatLng([lat,lon]);
+},3000);
+
 }
 
 // ===== ALERT =====
@@ -180,11 +208,10 @@ let el=document.getElementById(id);
 
 let w=await getWind(route.start.lat,route.start.lon,i*24);
 
-el.className="tile "+cls(w.speed);
+el.className="tile "+(w.speed>20?"veryhigh":"medium");
 
 el.innerHTML=`
 <b>${route.name}</b><br>
-Dzień ${i+1}<br>
 💨 ${w.speed.toFixed(1)} km/h<br>
 ${w.src}
 `;
@@ -192,21 +219,19 @@ ${w.src}
 el.onclick=async()=>{
 
 if(line) map.removeLayer(line);
-if(zone) map.removeLayer(zone);
 
 let pts=await simulate(route);
 
 line=L.polyline(pts,{color:"red"}).addTo(map);
 
+drawHeat();
+
 let last=pts[pts.length-1];
 
-// strefa spadku
-zone=drawZone(last).addTo(map);
-
-map.fitBounds(line.getBounds());
-
-// sprawdzenie celu
-let d=dist(last[0],last[1],route.end.lat,route.end.lon);
+let d=Math.sqrt(
+Math.pow(last[0]-route.end.lat,2)+
+Math.pow(last[1]-route.end.lon,2)
+)*111;
 
 if(d<30) alertOn();
 
@@ -214,13 +239,37 @@ if(d<30) alertOn();
 
 }
 
-// ===== START =====
+// ===== RAPORT =====
+async function updateReport(){
+
+let w=await getWind(routes[0].start.lat,routes[0].start.lon,0);
+
+document.getElementById("report").innerHTML=`
+<b>📊 RAPORT</b><br>
+Status: ${w.speed>20?"SPRZYJAJĄCE":"NIE"}<br>
+Źródło: ${w.src}<br>
+Wiatr: ${w.speed.toFixed(1)} km/h
+`;
+}
+
+// ===== INIT =====
+function loadAll(){
+
 setTile("t1",routes[0],0);
 setTile("t2",routes[0],1);
 setTile("t3",routes[1],0);
 setTile("t4",routes[1],1);
 setTile("t5",routes[2],0);
 setTile("t6",routes[2],1);
+
+updateReport();
+
+}
+
+setInterval(loadAll,300000);
+
+startGPS();
+loadAll();
 
 </script>
 
