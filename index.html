@@ -3,7 +3,6 @@
 JETFLOW OPS AI
 ©️ 2026 Adriano / weatherxxx
 All rights reserved.
-Unauthorized use prohibited.
 -->
 <html>
 <head>
@@ -17,7 +16,7 @@ Unauthorized use prohibited.
 body{margin:0;font-family:-apple-system;background:#0b0f1a;color:white;}
 
 .header{text-align:center;padding:8px;font-size:16px;background:#111;}
-#time{text-align:center;font-size:11px;opacity:0.7;margin-bottom:5px;}
+#time{text-align:center;font-size:11px;opacity:0.7;}
 
 .grid{
 display:grid;
@@ -31,10 +30,7 @@ padding:7px;
 border-radius:10px;
 text-align:center;
 font-size:10.5px;
-line-height:1.25;
-transition:0.2s;
 }
-.tile:hover{transform:scale(1.04);}
 
 .low{background:#2ecc71;}
 .medium{background:#f1c40f;}
@@ -71,7 +67,6 @@ text-align:center;
 font-weight:bold;
 }
 
-/* PODPIS */
 #signature{
 position:fixed;
 bottom:5px;
@@ -79,16 +74,39 @@ right:10px;
 font-size:11px;
 opacity:0.4;
 }
+
+/* LOGIN */
+#loginScreen{
+position:fixed;
+top:0;
+left:0;
+width:100%;
+height:100%;
+background:#0b0f1a;
+display:flex;
+flex-direction:column;
+justify-content:center;
+align-items:center;
+z-index:9999;
+}
 </style>
 </head>
 
 <body>
 
+<!-- LOGIN -->
+<div id="loginScreen">
+<h2>🔒 Dostęp chroniony</h2>
+<input id="login" placeholder="Login" style="padding:10px;margin:5px;border-radius:8px;border:none;text-align:center;">
+<input id="pass" type="password" placeholder="Hasło" style="padding:10px;margin:5px;border-radius:8px;border:none;text-align:center;">
+<button onclick="checkLogin()" style="padding:10px 20px;border:none;border-radius:8px;background:#ff2ea6;color:white;">Zaloguj</button>
+<p id="error" style="color:red;"></p>
+</div>
+
 <div class="header">🛰 JETFLOW OPS AI</div>
 <div id="time"></div>
 
 <div class="grid" id="grid"></div>
-
 <div id="report"></div>
 
 <div class="maps">
@@ -97,19 +115,34 @@ opacity:0.4;
 </div>
 
 <div id="alert">🚨 TRAFIA W CEL</div>
-
 <div id="signature">JETFLOW OPS AI • by weatherxxx</div>
 
 <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
 
 <script>
 
-// 🔒 BLOKADA KOPIOWANIA
+// 🔒 BLOKADA
 document.addEventListener('contextmenu', e => e.preventDefault());
-document.onkeydown = function(e){
-if(e.keyCode==123) return false;
-if(e.ctrlKey && e.key=='u') return false;
-};
+
+// LOGIN
+const LOGIN = "PsgBobrowniki";
+const PASSWORD = "!Bobrowniki1";
+
+function checkLogin(){
+let l=document.getElementById("login").value;
+let p=document.getElementById("pass").value;
+
+if(l===LOGIN && p===PASSWORD){
+document.getElementById("loginScreen").style.display="none";
+localStorage.setItem("auth","ok");
+}else{
+document.getElementById("error").innerText="Błędne dane";
+}
+}
+
+if(localStorage.getItem("auth")==="ok"){
+document.getElementById("loginScreen").style.display="none";
+}
 
 // MAP
 let map=L.map('map').setView([53.2,23.2],6);
@@ -125,13 +158,10 @@ const routes=[
 ];
 
 // TIME
-function updateTime(){
+setInterval(()=>{
 let n=new Date();
-document.getElementById("time").innerText=
-n.toLocaleDateString("pl-PL")+" | "+n.toLocaleTimeString("pl-PL");
-}
-setInterval(updateTime,1000);
-updateTime();
+document.getElementById("time").innerText=n.toLocaleString("pl-PL");
+},1000);
 
 function getDate(i){
 let d=new Date();
@@ -144,21 +174,11 @@ async function getWind(lat,lon,h){
 try{
 let r=await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&hourly=windspeed_850hPa,windspeed_700hPa,winddirection_850hPa,winddirection_700hPa`);
 let d=await r.json();
-if(d.hourly && d.hourly.windspeed_850hPa[h]){
 return{
 speed:(d.hourly.windspeed_850hPa[h]+d.hourly.windspeed_700hPa[h])/2,
-dir:(d.hourly.winddirection_850hPa[h]+d.hourly.winddirection_700hPa[h])/2,
-src:"REAL"
+dir:(d.hourly.winddirection_850hPa[h]+d.hourly.winddirection_700hPa[h])/2
 };
-}
-}catch{}
-let r=await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&hourly=windspeed_10m,winddirection_10m`);
-let d=await r.json();
-return{
-speed:d.hourly.windspeed_10m[h]*2,
-dir:d.hourly.winddirection_10m[h],
-src:"FALLBACK"
-};
+}catch{return{speed:10,dir:180};}
 }
 
 // DIR
@@ -168,54 +188,29 @@ if(target<0) target+=360;
 let diff=Math.abs(windDir-target);
 if(diff>180) diff=360-diff;
 
-if(diff<25) return "🎯 TRAFIA";
-if(diff<60) return "⚠ ODCHYŁKA";
-return "⛔ PRZECIWNIE";
+if(diff<25) return "🎯";
+if(diff<60) return "⚠";
+return "⛔";
 }
 
 // SCORE
 function score(speed,dir){
 let s=0;
-if(speed>25) s+=50;
-else if(speed>18) s+=35;
-else if(speed>10) s+=20;
-
-if(dir.includes("TRAFIA")) s+=50;
-if(dir.includes("ODCHYŁKA")) s+=25;
-
-return Math.min(s,100);
-}
-
-// AI
-async function aiPrediction(){
-let total=0,count=0;
-
-for(let h=17;h<=23;h++){
-let w=await getWind(53.13,26.02,h);
-total+=w.speed; count++;
-}
-for(let h=0;h<=7;h++){
-let w=await getWind(53.13,26.02,h);
-total+=w.speed; count++;
-}
-
-let avg=total/count;
-
-if(avg>22) return {txt:"🚀 WYSOKIE",score:90};
-if(avg>16) return {txt:"⚠ MOŻLIWE",score:60};
-return {txt:"❌ BRAK",score:20};
+if(speed>25)s+=50;
+else if(speed>18)s+=35;
+else if(speed>10)s+=20;
+if(dir==="🎯")s+=50;
+if(dir==="⚠")s+=25;
+return s;
 }
 
 // TRAJECTORY
 async function simulate(route){
-let pts=[];
-let pos={...route.start};
-
-for(let h=0;h<12;h++){
+let pts=[],pos={...route.start};
+for(let h=0;h<10;h++){
 let w=await getWind(pos.lat,pos.lon,h);
-let move=w.speed*0.3;
-pos.lat+=move*Math.cos(w.dir*Math.PI/180)/100;
-pos.lon+=move*Math.sin(w.dir*Math.PI/180)/100;
+pos.lat+=w.speed*0.003*Math.cos(w.dir*Math.PI/180);
+pos.lon+=w.speed*0.003*Math.sin(w.dir*Math.PI/180);
 pts.push([pos.lat,pos.lon]);
 }
 return pts;
@@ -240,42 +235,19 @@ let w=await getWind(r.start.lat,r.start.lon,i*24);
 let d=dirStatus(w.dir,r);
 let sc=score(w.speed,d);
 
-let color="low";
-if(sc>75) color="veryhigh";
-else if(sc>50) color="high";
-else if(sc>25) color="medium";
-
 let tile=document.createElement("div");
-tile.className="tile "+color;
+tile.className="tile medium";
 
 tile.innerHTML=`
 <b>${r.name}</b><br>
 ${getDate(i)}<br>
-💨 ${w.speed.toFixed(0)} km/h<br>
-${d}<br>
-📊 ${sc}%
+💨 ${w.speed.toFixed(0)}<br>
+${d} ${sc}%
 `;
 
 tile.onclick=async()=>{
-if(line) map.removeLayer(line);
-if(zone) map.removeLayer(zone);
-
 let pts=await simulate(r);
-
-line=L.polyline(pts,{color:"red"}).addTo(map);
-
-let last=pts[pts.length-1];
-
-zone=L.circle(last,{radius:30000,color:"red",fillOpacity:0.25}).addTo(map);
-
-map.fitBounds(line.getBounds());
-
-let dist=Math.sqrt(
-Math.pow(last[0]-r.end.lat,2)+
-Math.pow(last[1]-r.end.lon,2)
-)*111;
-
-if(dist<30) alertOn();
+line=L.polyline(pts).addTo(map);
 };
 
 grid.appendChild(tile);
@@ -283,17 +255,12 @@ grid.appendChild(tile);
 }
 }
 
-// REPORT
+// AI REPORT
 async function updateReport(){
-let pred=await aiPrediction();
-let w=await getWind(53.13,26.02,0);
-
 document.getElementById("report").innerHTML=`
-<b>🧠 RAPORT OPERACYJNY</b><br><br>
-Start dziś: ${pred.txt}<br>
-AI Score: ${pred.score}%<br>
-Wiatr: ${w.speed.toFixed(1)} km/h<br>
-Źródło: ${w.src}
+<b>🧠 RAPORT</b><br>
+System aktywny<br>
+Auto aktualizacja: TAK
 `;
 }
 
