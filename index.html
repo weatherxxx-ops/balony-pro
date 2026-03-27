@@ -9,23 +9,26 @@
 
 <style>
 body{margin:0;font-family:-apple-system;background:#0b0f1a;color:white;}
-.header{text-align:center;padding:15px;font-size:20px;background:#111;}
-#time{text-align:center;font-size:13px;opacity:0.7;}
+
+.header{text-align:center;padding:10px;font-size:18px;background:#111;}
+#time{text-align:center;font-size:12px;opacity:0.7;margin-bottom:5px;}
 
 .grid{
 display:grid;
-grid-template-columns:1fr 1fr;
-gap:10px;
-padding:10px;
+grid-template-columns:repeat(3, 1fr);
+gap:8px;
+padding:8px;
 }
 
 .tile{
-padding:15px;
-border-radius:15px;
+padding:10px;
+border-radius:12px;
 text-align:center;
-transition:0.3s;
+font-size:12px;
+line-height:1.4;
+transition:0.2s;
 }
-.tile:hover{transform:scale(1.03);}
+.tile:hover{transform:scale(1.05);}
 
 .low{background:#2ecc71;}
 .medium{background:#f1c40f;}
@@ -33,32 +36,34 @@ transition:0.3s;
 .veryhigh{background:#ff2ea6;}
 
 #report{
-margin:10px;
-padding:15px;
-border-radius:15px;
+margin:8px;
+padding:10px;
+border-radius:12px;
 background:#1c1f2b;
+font-size:13px;
 }
 
 .maps{
 display:flex;
-gap:10px;
-padding:10px;
+gap:8px;
+padding:8px;
 }
 
-#map{height:260px;flex:1;border-radius:15px;}
-iframe{flex:1;height:260px;border:none;border-radius:15px;}
+#map{height:220px;flex:1;border-radius:12px;}
+iframe{flex:1;height:220px;border:none;border-radius:12px;}
 
 #alert{
 position:fixed;
-bottom:15px;
+bottom:10px;
 left:10px;
 right:10px;
 background:red;
-padding:12px;
-border-radius:12px;
+padding:10px;
+border-radius:10px;
 display:none;
 text-align:center;
 font-weight:bold;
+font-size:14px;
 }
 </style>
 </head>
@@ -83,20 +88,20 @@ font-weight:bold;
 
 <script>
 
-// ===== MAP =====
+// MAP
 let map=L.map('map').setView([53.2,23.2],6);
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
 
 let line=null, zone=null;
 
-// ===== ROUTES =====
+// ROUTES
 const routes=[
-{ name:"Baranowicze → Białystok", start:{lat:53.13,lon:26.02}, end:{lat:53.13,lon:23.16} },
-{ name:"Baranowicze → Sokółka", start:{lat:53.13,lon:26.02}, end:{lat:53.41,lon:23.50} },
-{ name:"Grodno → Sokółka", start:{lat:53.67,lon:23.83}, end:{lat:53.41,lon:23.50} }
+{ name:"B→BIA", start:{lat:53.13,lon:26.02}, end:{lat:53.13,lon:23.16} },
+{ name:"B→SOK", start:{lat:53.13,lon:26.02}, end:{lat:53.41,lon:23.50} },
+{ name:"G→SOK", start:{lat:53.67,lon:23.83}, end:{lat:53.41,lon:23.50} }
 ];
 
-// ===== TIME =====
+// TIME
 function updateTime(){
 let n=new Date();
 document.getElementById("time").innerText=
@@ -111,7 +116,7 @@ d.setDate(d.getDate()+i);
 return d.toLocaleDateString("pl-PL");
 }
 
-// ===== WIND =====
+// WIND
 async function getWind(lat,lon,h){
 try{
 let r=await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&hourly=windspeed_850hPa,windspeed_700hPa,winddirection_850hPa,winddirection_700hPa`);
@@ -133,58 +138,33 @@ src:"FALLBACK"
 };
 }
 
-// ===== DIRECTION =====
+// DIRECTION
 function dirStatus(windDir,route){
 let target=Math.atan2(route.end.lon-route.start.lon,route.end.lat-route.start.lat)*(180/Math.PI);
 if(target<0) target+=360;
 let diff=Math.abs(windDir-target);
 if(diff>180) diff=360-diff;
-if(diff<25) return "🎯 TRAFIA";
-if(diff<60) return "⚠ ODCHYŁKA";
-return "⛔ PRZECIWNIE";
+if(diff<25) return "🎯";
+if(diff<60) return "⚠";
+return "⛔";
 }
 
-// ===== SCORE =====
+// SCORE
 function score(speed,dir){
 let s=0;
 if(speed>25) s+=50;
 else if(speed>18) s+=35;
 else if(speed>10) s+=20;
-if(dir.includes("TRAFIA")) s+=50;
-if(dir.includes("ODCHYŁKA")) s+=25;
+if(dir==="🎯") s+=50;
+if(dir==="⚠") s+=25;
 return Math.min(s,100);
 }
 
-// ===== AI START PREDICTION =====
-async function aiPrediction(){
-
-let total=0;
-let count=0;
-
-for(let h=17;h<=23;h++){
-let w=await getWind(53.13,26.02,h);
-total+=w.speed;
-count++;
-}
-for(let h=0;h<=7;h++){
-let w=await getWind(53.13,26.02,h);
-total+=w.speed;
-count++;
-}
-
-let avg=total/count;
-
-if(avg>22) return {txt:"🚀 WYSOKIE PRAWDOPODOBIEŃSTWO",score:90};
-if(avg>16) return {txt:"⚠ MOŻLIWE",score:60};
-return {txt:"❌ MAŁO PRAWDOPODOBNE",score:20};
-
-}
-
-// ===== TRAJECTORY =====
+// TRAJECTORY
 async function simulate(route){
 let pts=[];
 let pos={...route.start};
-for(let h=0;h<12;h++){
+for(let h=0;h<10;h++){
 let w=await getWind(pos.lat,pos.lon,h);
 let move=w.speed*0.3;
 pos.lat+=move*Math.cos(w.dir*Math.PI/180)/100;
@@ -194,21 +174,19 @@ pts.push([pos.lat,pos.lon]);
 return pts;
 }
 
-// ===== ALERT =====
+// ALERT
 function alertOn(){
 let el=document.getElementById("alert");
 el.style.display="block";
 setTimeout(()=>el.style.display="none",4000);
 }
 
-// ===== TILES =====
+// TILES
 async function buildTiles(){
-
 let grid=document.getElementById("grid");
 grid.innerHTML="";
 
 for(let i=0;i<5;i++){
-
 for(let r of routes){
 
 let w=await getWind(r.start.lat,r.start.lon,i*24);
@@ -226,9 +204,8 @@ tile.className="tile "+color;
 tile.innerHTML=`
 <b>${r.name}</b><br>
 ${getDate(i)}<br>
-💨 ${w.speed.toFixed(1)} km/h<br>
-${d}<br>
-📊 ${sc}%
+💨 ${w.speed.toFixed(0)} km/h<br>
+${d} ${sc}%
 `;
 
 tile.onclick=async()=>{
@@ -250,7 +227,6 @@ Math.pow(last[1]-r.end.lon,2)
 )*111;
 
 if(dist<30) alertOn();
-
 };
 
 grid.appendChild(tile);
@@ -258,21 +234,20 @@ grid.appendChild(tile);
 }
 }
 
-// ===== REPORT =====
+// REPORT
 async function updateReport(){
-
-let pred=await aiPrediction();
+let w=await getWind(routes[0].start.lat,routes[0].start.lon,0);
+let d=dirStatus(w.dir,routes[0]);
+let sc=score(w.speed,d);
 
 document.getElementById("report").innerHTML=`
-<b>🧠 AI RAPORT OPERACYJNY</b><br><br>
-
-Start dziś: ${pred.txt}<br>
-AI Score: ${pred.score}%<br>
-Okno: ${(new Date().getHours()>=17||new Date().getHours()<=7)?"AKTYWNE 🌙":"NISKIE ☀️"}
+<b>📊 RAPORT</b><br>
+Status: ${sc>70?"SPRZYJAJĄCE":"BRAK"}<br>
+Score: ${sc}%<br>
 `;
 }
 
-// ===== INIT =====
+// INIT
 function loadAll(){
 buildTiles();
 updateReport();
