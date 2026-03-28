@@ -1,34 +1,22 @@
 <!DOCTYPE html>
-<!-- JETFLOW OPS AI -->
 <html>
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-
 <title>JETFLOW OPS AI</title>
 
 <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
 
 <style>
 body{margin:0;background:#0b0f1a;color:white;font-family:-apple-system;}
-
 .header{text-align:center;padding:8px;background:#111;}
 #time{text-align:center;font-size:11px;opacity:0.7;}
 
-.grid{
-display:grid;
-grid-template-columns:repeat(3,1fr);
-gap:6px;
-padding:6px;
-}
+.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;padding:6px;}
 
 .tile{
-padding:10px;
-border-radius:12px;
-text-align:center;
-font-size:12px;
-cursor:pointer;
-transition:0.2s;
+padding:10px;border-radius:12px;text-align:center;
+font-size:12px;cursor:pointer;transition:0.2s;
 }
 .tile:hover{transform:scale(1.05);}
 
@@ -38,53 +26,24 @@ transition:0.2s;
 .veryhigh{background:#ff2ea6;}
 
 #report{
-margin:6px;
-padding:12px;
-border-radius:12px;
-background:#1c1f2b;
+margin:6px;padding:12px;border-radius:12px;background:#1c1f2b;
 }
 
-.maps{
-display:flex;
-gap:6px;
-padding:6px;
-}
-
-#map{
-height:220px;
-flex:1;
-border-radius:12px;
-}
-
-iframe{
-flex:1;
-height:220px;
-border:none;
-border-radius:12px;
-}
+.maps{display:flex;gap:6px;padding:6px;}
+#map{height:230px;flex:1;border-radius:12px;}
+iframe{flex:1;height:230px;border:none;border-radius:12px;}
 
 #alert{
-position:fixed;
-bottom:40px;
-left:10px;
-right:10px;
-background:red;
-padding:10px;
-border-radius:10px;
-display:none;
-text-align:center;
-font-weight:bold;
+position:fixed;bottom:40px;left:10px;right:10px;
+background:red;padding:10px;border-radius:10px;
+display:none;text-align:center;font-weight:bold;
 }
 
 #loginScreen{
-position:fixed;
-width:100%;
-height:100%;
+position:fixed;width:100%;height:100%;
 background:#0b0f1a;
-display:flex;
-flex-direction:column;
-justify-content:center;
-align-items:center;
+display:flex;flex-direction:column;
+justify-content:center;align-items:center;
 z-index:9999;
 }
 </style>
@@ -92,7 +51,6 @@ z-index:9999;
 
 <body>
 
-<!-- LOGIN -->
 <div id="loginScreen">
 <h2>🔒 Dostęp</h2>
 <input id="login" placeholder="Login"><br><br>
@@ -136,30 +94,26 @@ loginScreen.style.display="none";
 let map=L.map('map').setView([53.2,23.2],6);
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
 
-let line;
+let line, startMarker, endMarker, animMarker;
 
 // ROUTES
 const routes=[
-{ name:"Baranowicze → Białystok", start:{lat:53.13,lon:26.02}, end:{lat:53.13,lon:23.16}},
-{ name:"Baranowicze → Sokółka", start:{lat:53.13,lon:26.02}, end:{lat:53.41,lon:23.50}},
-{ name:"Grodno → Sokółka", start:{lat:53.67,lon:23.83}, end:{lat:53.41,lon:23.50}}
+{ name:"Baranowicze → Białystok", start:{lat:53.13,lon:26.02}},
+{ name:"Baranowicze → Sokółka", start:{lat:53.13,lon:26.02}},
+{ name:"Grodno → Sokółka", start:{lat:53.67,lon:23.83}}
 ];
 
 // TIME
 setInterval(()=>time.innerText=new Date().toLocaleString("pl-PL"),1000);
 
-// DATA
+// DATE
 function getDate(i){
 let d=new Date();
-d.setHours(0,0,0,0);
 d.setDate(d.getDate()+i);
-let day=String(d.getDate()).padStart(2,'0');
-let month=String(d.getMonth()+1).padStart(2,'0');
-let year=d.getFullYear();
-return `${day}.${month}.${year}`;
+return d.toLocaleDateString("pl-PL");
 }
 
-// WIND 3 WARSTWY
+// WIND
 async function getWind(lat,lon,h){
 let r=await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&hourly=windspeed_925hPa,windspeed_850hPa,windspeed_700hPa,winddirection_925hPa,winddirection_850hPa,winddirection_700hPa`);
 let d=await r.json();
@@ -171,29 +125,21 @@ let layers=[
 ];
 
 layers.sort((a,b)=>b.speed-a.speed);
-
 return layers[0];
-}
-
-// SCORE
-function score(speed){
-if(speed>25)return 90;
-if(speed>18)return 70;
-if(speed>14)return 50;
-if(speed>10)return 30;
-return 10;
 }
 
 // TRAJEKTORIA
 async function simulate(route){
+
 let pts=[];
 let pos={...route.start};
+
+// 🔥 START FIX
+pts.push([pos.lat,pos.lon]);
 
 for(let h=0;h<12;h++){
 
 let w=await getWind(pos.lat,pos.lon,h);
-
-// poprawka kierunku
 let dir=(w.dir+180)%360;
 
 let dist=w.speed;
@@ -210,12 +156,54 @@ pts.push([pos.lat,pos.lon]);
 return pts;
 }
 
+// ANIMACJA
+function animate(points){
+
+if(animMarker) map.removeLayer(animMarker);
+
+let i=0;
+animMarker=L.circleMarker(points[0],{radius:6,color:"yellow"}).addTo(map);
+
+let interval=setInterval(()=>{
+i++;
+if(i>=points.length) return clearInterval(interval);
+animMarker.setLatLng(points[i]);
+},200);
+}
+
 // CLICK
 async function handleClick(route){
+
 if(line) map.removeLayer(line);
+if(startMarker) map.removeLayer(startMarker);
+if(endMarker) map.removeLayer(endMarker);
+
 let pts=await simulate(route);
+
+// linia
 line=L.polyline(pts,{color:"red",weight:3}).addTo(map);
+
+// START
+startMarker=L.circleMarker(pts[0],{color:"green"}).addTo(map)
+.bindPopup("START");
+
+// KONIEC
+endMarker=L.circleMarker(pts[pts.length-1],{color:"red"}).addTo(map)
+.bindPopup("KONIEC");
+
+// animacja
+animate(pts);
+
 map.fitBounds(line.getBounds());
+}
+
+// SCORE
+function score(speed){
+if(speed>25)return 90;
+if(speed>18)return 70;
+if(speed>14)return 50;
+if(speed>10)return 30;
+return 10;
 }
 
 // TILES
@@ -227,7 +215,6 @@ for(let i=0;i<5;i++){
 for(let r of routes){
 
 let w=await getWind(r.start.lat,r.start.lon,i*24);
-
 let sc=score(w.speed);
 
 let color="low";
