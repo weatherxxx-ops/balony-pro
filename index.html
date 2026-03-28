@@ -1,8 +1,10 @@
 <!DOCTYPE html>
+<!-- JETFLOW OPS AI -->
 <html>
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
 <title>JETFLOW OPS AI</title>
 
 <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
@@ -90,6 +92,7 @@ z-index:9999;
 
 <body>
 
+<!-- LOGIN -->
 <div id="loginScreen">
 <h2>🔒 Dostęp</h2>
 <input id="login" placeholder="Login"><br><br>
@@ -123,7 +126,7 @@ function checkLogin(){
 if(login.value===LOGIN && pass.value===PASSWORD){
 loginScreen.style.display="none";
 localStorage.setItem("auth","ok");
-}else error.innerText="Błąd";
+}else error.innerText="Błędne dane";
 }
 if(localStorage.getItem("auth")==="ok"){
 loginScreen.style.display="none";
@@ -145,20 +148,44 @@ const routes=[
 // TIME
 setInterval(()=>time.innerText=new Date().toLocaleString("pl-PL"),1000);
 
-// WIND
-async function getWind(lat,lon,h){
-let r=await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&hourly=windspeed_850hPa,winddirection_850hPa`);
-let d=await r.json();
-
-return {
-speed:d.hourly.windspeed_850hPa[h],
-dir:d.hourly.winddirection_850hPa[h]
-};
+// DATA
+function getDate(i){
+let d=new Date();
+d.setHours(0,0,0,0);
+d.setDate(d.getDate()+i);
+let day=String(d.getDate()).padStart(2,'0');
+let month=String(d.getMonth()+1).padStart(2,'0');
+let year=d.getFullYear();
+return `${day}.${month}.${year}`;
 }
 
-// TRAJEKTORIA FIX
-async function simulate(route){
+// WIND 3 WARSTWY
+async function getWind(lat,lon,h){
+let r=await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&hourly=windspeed_925hPa,windspeed_850hPa,windspeed_700hPa,winddirection_925hPa,winddirection_850hPa,winddirection_700hPa`);
+let d=await r.json();
 
+let layers=[
+{speed:d.hourly.windspeed_925hPa[h],dir:d.hourly.winddirection_925hPa[h],l:"925"},
+{speed:d.hourly.windspeed_850hPa[h],dir:d.hourly.winddirection_850hPa[h],l:"850"},
+{speed:d.hourly.windspeed_700hPa[h],dir:d.hourly.winddirection_700hPa[h],l:"700"}
+];
+
+layers.sort((a,b)=>b.speed-a.speed);
+
+return layers[0];
+}
+
+// SCORE
+function score(speed){
+if(speed>25)return 90;
+if(speed>18)return 70;
+if(speed>14)return 50;
+if(speed>10)return 30;
+return 10;
+}
+
+// TRAJEKTORIA
+async function simulate(route){
 let pts=[];
 let pos={...route.start};
 
@@ -166,6 +193,7 @@ for(let h=0;h<12;h++){
 
 let w=await getWind(pos.lat,pos.lon,h);
 
+// poprawka kierunku
 let dir=(w.dir+180)%360;
 
 let dist=w.speed;
@@ -191,16 +219,32 @@ map.fitBounds(line.getBounds());
 }
 
 // TILES
-function buildTiles(){
+async function buildTiles(){
+
 grid.innerHTML="";
 
 for(let i=0;i<5;i++){
 for(let r of routes){
 
-let tile=document.createElement("div");
-tile.className="tile medium";
+let w=await getWind(r.start.lat,r.start.lon,i*24);
 
-tile.innerHTML=`${r.name}<br>Dzień +${i}`;
+let sc=score(w.speed);
+
+let color="low";
+if(sc>80)color="veryhigh";
+else if(sc>60)color="high";
+else if(sc>40)color="medium";
+
+let tile=document.createElement("div");
+tile.className="tile "+color;
+
+tile.innerHTML=`
+<b>${r.name}</b><br>
+📅 ${getDate(i)}<br>
+💨 ${w.speed.toFixed(1)} km/h<br>
+🌐 ${w.l} hPa<br>
+📊 ${sc}%
+`;
 
 tile.onclick=()=>handleClick(r);
 
@@ -209,13 +253,55 @@ grid.appendChild(tile);
 }
 }
 
+// TREND
+async function getTrend(){
+let w1=await getWind(53.13,26.02,0);
+let w2=await getWind(53.13,26.02,3);
+
+if(w2.speed>w1.speed)return"📈 ROŚNIE";
+if(w2.speed<w1.speed)return"📉 SPADA";
+return"➡ STABILNY";
+}
+
+// PROGNOZA
+async function predict(){
+let good=0;
+for(let i=0;i<6;i++){
+let w=await getWind(53.13,26.02,i);
+if(w.speed>15)good++;
+}
+if(good>=4)return"🚀 WYSOKIE";
+if(good>=2)return"⚠ MOŻLIWE";
+return"❌ BRAK";
+}
+
+// OKNO
+async function detectWindow(){
+let good=0;
+for(let i=0;i<6;i++){
+let w=await getWind(53.13,26.02,i);
+if(w.speed>14)good++;
+}
+if(good>=3)return"🌙 AKTYWNE";
+return"❌ BRAK";
+}
+
 // RAPORT
-function updateReport(){
+async function updateReport(){
+
+let w=await getWind(53.13,26.02,0);
+
+let trend=await getTrend();
+let prog=await predict();
+let window=await detectWindow();
+
 report.innerHTML=`
-<b>🧠 RAPORT</b><br>
-System aktywny<br>
-Trajektoria: OK<br>
-Kierunek: poprawiony<br>
+<b>🧠 RAPORT OPERACYJNY</b><br><br>
+Wiatr: ${w.speed.toFixed(1)} km/h<br>
+Warstwa: ${w.l} hPa<br>
+Trend: ${trend}<br>
+Prognoza: ${prog}<br>
+Okno: ${window}
 `;
 }
 
@@ -225,6 +311,7 @@ buildTiles();
 updateReport();
 }
 
+setInterval(loadAll,60000);
 loadAll();
 
 </script>
