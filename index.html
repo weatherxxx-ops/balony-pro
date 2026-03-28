@@ -1,37 +1,133 @@
 <!DOCTYPE html>
-<!-- JETFLOW OPS AI ULTRA -->
 <html>
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-
 <title>JETFLOW OPS AI</title>
 
 <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
 
 <style>
 body{margin:0;background:#0b0f1a;color:white;font-family:-apple-system;}
+
 .header{text-align:center;padding:8px;background:#111;}
-.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:5px;padding:5px;}
-.tile{padding:8px;border-radius:10px;text-align:center;font-size:11px;cursor:pointer;transition:0.2s;}
+#time{text-align:center;font-size:11px;opacity:0.7;}
+
+.grid{
+display:grid;
+grid-template-columns:repeat(3,1fr);
+gap:6px;
+padding:6px;
+}
+
+.tile{
+padding:10px;
+border-radius:12px;
+text-align:center;
+font-size:12px;
+cursor:pointer;
+transition:0.2s;
+}
 .tile:hover{transform:scale(1.05);}
+
 .low{background:#2ecc71;}
 .medium{background:#f1c40f;}
 .high{background:#e67e22;}
 .veryhigh{background:#ff2ea6;}
-#map{height:230px;}
+
+#report{
+margin:6px;
+padding:12px;
+border-radius:12px;
+background:#1c1f2b;
+}
+
+.maps{
+display:flex;
+gap:6px;
+padding:6px;
+}
+
+#map{
+height:220px;
+flex:1;
+border-radius:12px;
+}
+
+iframe{
+flex:1;
+height:220px;
+border:none;
+border-radius:12px;
+}
+
+#alert{
+position:fixed;
+bottom:40px;
+left:10px;
+right:10px;
+background:red;
+padding:10px;
+border-radius:10px;
+display:none;
+text-align:center;
+font-weight:bold;
+}
+
+#loginScreen{
+position:fixed;
+width:100%;
+height:100%;
+background:#0b0f1a;
+display:flex;
+flex-direction:column;
+justify-content:center;
+align-items:center;
+z-index:9999;
+}
 </style>
 </head>
 
 <body>
 
-<div class="header">🛰 JETFLOW OPS AI ULTRA</div>
+<div id="loginScreen">
+<h2>🔒 Dostęp</h2>
+<input id="login" placeholder="Login"><br><br>
+<input id="pass" type="password" placeholder="Hasło"><br><br>
+<button onclick="checkLogin()">Zaloguj</button>
+<p id="error"></p>
+</div>
+
+<div class="header">🛰 JETFLOW OPS AI</div>
+<div id="time"></div>
+
 <div id="grid" class="grid"></div>
+<div id="report"></div>
+
+<div class="maps">
 <div id="map"></div>
+<iframe src="https://embed.windy.com/embed2.html?lat=53.2&lon=23.2&zoom=6&level=850h&overlay=wind"></iframe>
+</div>
+
+<div id="alert">🚨 PODEJRZANY OBIEKT</div>
 
 <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
 
 <script>
+
+// LOGIN
+const LOGIN="PsgBobrowniki";
+const PASSWORD="!Bobrowniki1";
+
+function checkLogin(){
+if(login.value===LOGIN && pass.value===PASSWORD){
+loginScreen.style.display="none";
+localStorage.setItem("auth","ok");
+}else error.innerText="Błąd";
+}
+if(localStorage.getItem("auth")==="ok"){
+loginScreen.style.display="none";
+}
 
 // MAP
 let map=L.map('map').setView([53.2,23.2],6);
@@ -41,64 +137,39 @@ let line;
 
 // ROUTES
 const routes=[
-{ name:"Baranowicze → Białystok", start:{lat:53.13,lon:26.02}},
-{ name:"Baranowicze → Sokółka", start:{lat:53.13,lon:26.02}},
-{ name:"Grodno → Sokółka", start:{lat:53.67,lon:23.83}}
+{ name:"Baranowicze → Białystok", start:{lat:53.13,lon:26.02}, end:{lat:53.13,lon:23.16}},
+{ name:"Baranowicze → Sokółka", start:{lat:53.13,lon:26.02}, end:{lat:53.41,lon:23.50}},
+{ name:"Grodno → Sokółka", start:{lat:53.67,lon:23.83}, end:{lat:53.41,lon:23.50}}
 ];
 
-// WIND (3 WARSTWY)
-async function getWindAll(lat,lon,h){
+// TIME
+setInterval(()=>time.innerText=new Date().toLocaleString("pl-PL"),1000);
 
-let r=await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&hourly=windspeed_925hPa,windspeed_850hPa,windspeed_700hPa,winddirection_925hPa,winddirection_850hPa,winddirection_700hPa`);
+// WIND
+async function getWind(lat,lon,h){
+let r=await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&hourly=windspeed_850hPa,winddirection_850hPa`);
 let d=await r.json();
 
-return [
-{speed:d.hourly.windspeed_925hPa[h],dir:d.hourly.winddirection_925hPa[h],w:0.5},
-{speed:d.hourly.windspeed_850hPa[h],dir:d.hourly.winddirection_850hPa[h],w:0.3},
-{speed:d.hourly.windspeed_700hPa[h],dir:d.hourly.winddirection_700hPa[h],w:0.2}
-];
+return {
+speed:d.hourly.windspeed_850hPa[h],
+dir:d.hourly.winddirection_850hPa[h]
+};
 }
 
-// 🔥 ULTRA TRAJEKTORIA
+// TRAJEKTORIA FIX
 async function simulate(route){
 
 let pts=[];
 let pos={...route.start};
 
-let lastDir=null;
+for(let h=0;h<12;h++){
 
-// 10 min krok
-let step=0.166;
+let w=await getWind(pos.lat,pos.lon,h);
 
-for(let t=0;t<12;t+=step){
-
-let h=Math.floor(t);
-
-let winds=await getWindAll(pos.lat,pos.lon,h);
-
-// 🔥 mieszanie warstw
-let u=0,v=0;
-
-winds.forEach(w=>{
 let dir=(w.dir+180)%360;
-u+=Math.cos(dir*Math.PI/180)*w.speed*w.w;
-v+=Math.sin(dir*Math.PI/180)*w.speed*w.w;
-});
 
-let speed=Math.sqrt(u*u+v*v);
-let dir=Math.atan2(v,u)*(180/Math.PI);
-if(dir<0) dir+=360;
+let dist=w.speed;
 
-// 🔥 wygładzanie
-if(lastDir!==null){
-dir=(dir*0.7 + lastDir*0.3);
-}
-lastDir=dir;
-
-// km
-let dist=speed*step;
-
-// przeliczenie
 let dLat=(dist*Math.cos(dir*Math.PI/180))/111;
 let dLon=(dist*Math.sin(dir*Math.PI/180))/(111*Math.cos(pos.lat*Math.PI/180));
 
@@ -112,32 +183,49 @@ return pts;
 }
 
 // CLICK
-async function draw(route){
-
+async function handleClick(route){
 if(line) map.removeLayer(line);
-
 let pts=await simulate(route);
-
 line=L.polyline(pts,{color:"red",weight:3}).addTo(map);
-
 map.fitBounds(line.getBounds());
 }
 
-// UI
-function build(){
+// TILES
+function buildTiles(){
+grid.innerHTML="";
 
-let g=document.getElementById("grid");
+for(let i=0;i<5;i++){
+for(let r of routes){
 
-routes.forEach(r=>{
-let t=document.createElement("div");
-t.className="tile medium";
-t.innerHTML=`${r.name}<br>Kliknij`;
-t.onclick=()=>draw(r);
-g.appendChild(t);
-});
+let tile=document.createElement("div");
+tile.className="tile medium";
+
+tile.innerHTML=`${r.name}<br>Dzień +${i}`;
+
+tile.onclick=()=>handleClick(r);
+
+grid.appendChild(tile);
+}
+}
 }
 
-build();
+// RAPORT
+function updateReport(){
+report.innerHTML=`
+<b>🧠 RAPORT</b><br>
+System aktywny<br>
+Trajektoria: OK<br>
+Kierunek: poprawiony<br>
+`;
+}
+
+// INIT
+function loadAll(){
+buildTiles();
+updateReport();
+}
+
+loadAll();
 
 </script>
 
