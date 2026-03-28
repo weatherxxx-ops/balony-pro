@@ -14,64 +14,28 @@ All rights reserved.
 
 <style>
 body{margin:0;font-family:-apple-system;background:#0b0f1a;color:white;}
-.header{text-align:center;padding:8px;font-size:16px;background:#111;}
+.header{text-align:center;padding:8px;background:#111;}
 #time{text-align:center;font-size:11px;opacity:0.7;}
-
 .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:5px;padding:5px;}
 .tile{padding:7px;border-radius:10px;text-align:center;font-size:10px;}
-
 .low{background:#2ecc71;}
 .medium{background:#f1c40f;}
 .high{background:#e67e22;}
 .veryhigh{background:#ff2ea6;}
-
-#report{margin:6px;padding:10px;border-radius:10px;background:#1c1f2b;font-size:12px;}
-
+#report{margin:6px;padding:10px;border-radius:10px;background:#1c1f2b;}
 .maps{display:flex;gap:6px;padding:6px;}
 #map{height:200px;flex:1;border-radius:10px;}
 iframe{flex:1;height:200px;border:none;border-radius:10px;}
-
-#alert{
-position:fixed;
-bottom:40px;
-left:10px;
-right:10px;
-background:red;
-padding:10px;
-border-radius:10px;
-display:none;
-text-align:center;
-font-weight:bold;
-}
-
-#signature{
-position:fixed;
-bottom:5px;
-right:10px;
-font-size:11px;
-opacity:0.4;
-}
-
-#loginScreen{
-position:fixed;
-top:0;
-left:0;
-width:100%;
-height:100%;
-background:#0b0f1a;
-display:flex;
-flex-direction:column;
-justify-content:center;
-align-items:center;
-z-index:9999;
-}
+#alert{position:fixed;bottom:40px;left:10px;right:10px;background:red;padding:10px;border-radius:10px;display:none;text-align:center;}
+#signature{position:fixed;bottom:5px;right:10px;font-size:11px;opacity:0.4;}
+#loginScreen{position:fixed;width:100%;height:100%;background:#0b0f1a;display:flex;flex-direction:column;justify-content:center;align-items:center;z-index:9999;}
 </style>
 </head>
 
 <body>
 
 <div id="loginScreen">
-<h2>🔒 Dostęp chroniony</h2>
+<h2>🔒 Dostęp</h2>
 <input id="login" placeholder="Login">
 <input id="pass" type="password" placeholder="Hasło">
 <button onclick="checkLogin()">Zaloguj</button>
@@ -80,7 +44,7 @@ z-index:9999;
 
 <div class="header">🛰 JETFLOW OPS AI</div>
 <div id="time"></div>
-<div class="grid" id="grid"></div>
+<div id="grid" class="grid"></div>
 <div id="report"></div>
 
 <div class="maps">
@@ -88,15 +52,12 @@ z-index:9999;
 <iframe src="https://embed.windy.com/embed2.html?lat=53.2&lon=23.2&zoom=6&level=850h&overlay=wind"></iframe>
 </div>
 
-<div id="alert">🚨 TRAFIA W CEL</div>
+<div id="alert">🚨 PODEJRZANY OBIEKT</div>
 <div id="signature">JETFLOW OPS AI • by weatherxxx</div>
 
 <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
 
 <script>
-
-// BLOKADA
-document.addEventListener('contextmenu', e => e.preventDefault());
 
 // LOGIN
 const LOGIN="PsgBobrowniki";
@@ -112,11 +73,11 @@ if(localStorage.getItem("auth")==="ok"){
 loginScreen.style.display="none";
 }
 
-// MAPA
+// MAP
 let map=L.map('map').setView([53.2,23.2],6);
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
 
-let line,zone;
+let line,zone,liveMarkers=[];
 
 const routes=[
 { name:"Baranowicze → Białystok", start:{lat:53.13,lon:26.02}, end:{lat:53.13,lon:23.16}},
@@ -124,7 +85,7 @@ const routes=[
 { name:"Grodno → Sokółka", start:{lat:53.67,lon:23.83}, end:{lat:53.41,lon:23.50}}
 ];
 
-// CZAS
+// TIME
 setInterval(()=>time.innerText=new Date().toLocaleString("pl-PL"),1000);
 
 function getDate(i){
@@ -133,27 +94,22 @@ d.setDate(d.getDate()+i);
 return d.toLocaleDateString("pl-PL");
 }
 
-// WIATR WARSTWY
+// WIND (925/850/700)
 async function getWind(lat,lon,h){
-let r=await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&hourly=windspeed_850hPa,windspeed_700hPa,winddirection_850hPa,winddirection_700hPa`);
+let r=await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&hourly=windspeed_925hPa,windspeed_850hPa,windspeed_700hPa,winddirection_925hPa,winddirection_850hPa,winddirection_700hPa`);
 let d=await r.json();
 
-let w850={speed:d.hourly.windspeed_850hPa[h],dir:d.hourly.winddirection_850hPa[h]};
-let w700={speed:d.hourly.windspeed_700hPa[h],dir:d.hourly.winddirection_700hPa[h]};
+let layers=[
+{speed:d.hourly.windspeed_925hPa[h],dir:d.hourly.winddirection_925hPa[h],l:"925"},
+{speed:d.hourly.windspeed_850hPa[h],dir:d.hourly.winddirection_850hPa[h],l:"850"},
+{speed:d.hourly.windspeed_700hPa[h],dir:d.hourly.winddirection_700hPa[h],l:"700"}
+];
 
-let diff=Math.abs(w850.dir-w700.dir);
-if(diff>180) diff=360-diff;
-
-let layer="850";
-if(w700.speed>w850.speed && diff<40) layer="700";
-
-let unstable=diff>60;
-let final=layer==="700"?w700:w850;
-
-return {speed:final.speed,dir:final.dir,layer,unstable};
+layers.sort((a,b)=>b.speed-a.speed);
+return layers[0];
 }
 
-// KIERUNEK
+// DIR
 function dirScore(wind,route){
 let target=Math.atan2(route.end.lon-route.start.lon,route.end.lat-route.start.lat)*(180/Math.PI);
 if(target<0) target+=360;
@@ -166,72 +122,88 @@ return{txt:"PRZECIWNIE",score:0};
 }
 
 // SCORE
-function score(speed,dir,unstable){
+function score(speed,dir){
 let s=0;
 if(speed>25)s+=50;
 else if(speed>18)s+=40;
 else if(speed>14)s+=30;
 else if(speed>10)s+=20;
-else if(speed>7)s+=10;
 
-s+=dir*50;
-if(unstable)s-=15;
-
-return Math.max(0,Math.round(s));
+s+=dir*60;
+return Math.round(s);
 }
 
 // TRAJEKTORIA
 async function simulate(route){
-let pts=[];
-let pos={...route.start};
+let pts=[],pos={...route.start};
 
 for(let h=0;h<12;h++){
 let w=await getWind(pos.lat,pos.lon,h);
-
-let move=w.speed*0.35;
-pos.lat+=move*Math.cos(w.dir*Math.PI/180)/100;
-pos.lon+=move*Math.sin(w.dir*Math.PI/180)/100;
-
+pos.lat+=w.speed*0.003*Math.cos(w.dir*Math.PI/180);
+pos.lon+=w.speed*0.003*Math.sin(w.dir*Math.PI/180);
 pts.push([pos.lat,pos.lon]);
 }
 return pts;
 }
 
 // CLICK
-async function handleClick(route,sc,dir){
-
+async function handleClick(route){
 if(line) map.removeLayer(line);
-if(zone) map.removeLayer(zone);
-
 let pts=await simulate(route);
-
 line=L.polyline(pts,{color:"red"}).addTo(map);
-
-let last=pts[pts.length-1];
-
-zone=L.circle(last,{radius:30000,color:"red",fillOpacity:0.2}).addTo(map);
-
-map.fitBounds(line.getBounds());
-
-let dist=Math.sqrt(
-Math.pow(last[0]-route.end.lat,2)+
-Math.pow(last[1]-route.end.lon,2)
-)*111;
-
-if(dist<30 && sc>65 && dir==="TRAFIA"){
-alert.style.display="block";
-setTimeout(()=>alert.style.display="none",4000);
 }
+
+// 🔥 LIVE + DETEKCJA
+async function loadLive(){
+
+liveMarkers.forEach(m=>map.removeLayer(m));
+liveMarkers=[];
+
+try{
+let res=await fetch("https://api.v2.sondehub.org/sondes");
+let data=await res.json();
+
+for(let id in data){
+
+let o=data[id];
+if(!o.lat||!o.lon||!o.alt) continue;
+
+let isBalloon=o.alt>300&&o.alt<40000;
+
+let w=await getWind(o.lat,o.lon,0);
+
+let diff=Math.abs((o.heading||w.dir)-w.dir);
+if(diff>180) diff=360-diff;
+
+let suspicious=isBalloon && diff>60;
+
+let color="lime";
+if(isBalloon) color="magenta";
+if(suspicious) color="red";
+
+let marker=L.circleMarker([o.lat,o.lon],{radius:6,color}).addTo(map);
+
+marker.bindPopup(`${suspicious?"🚨 PODEJRZANY":"🟣 BALON"}<br>${o.alt}m`);
+
+liveMarkers.push(marker);
+
+if(suspicious){
+alert.style.display="block";
+setTimeout(()=>alert.style.display="none",5000);
+}
+
+}
+
+}catch(e){}
 }
 
 // TREND
 async function getTrend(){
 let w1=await getWind(53.13,26.02,0);
 let w2=await getWind(53.13,26.02,3);
-
-if(w2.speed>w1.speed) return "📈 ROŚNIE";
-if(w2.speed<w1.speed) return "📉 SPADA";
-return "➡ STABILNY";
+if(w2.speed>w1.speed)return"📈 ROŚNIE";
+if(w2.speed<w1.speed)return"📉 SPADA";
+return"➡ STABILNY";
 }
 
 // PROGNOZA
@@ -239,28 +211,39 @@ async function predict(){
 let good=0;
 for(let i=0;i<6;i++){
 let w=await getWind(53.13,26.02,i);
-if(w.speed>15) good++;
+if(w.speed>15)good++;
 }
 if(good>=4)return"🚀 WYSOKIE";
 if(good>=2)return"⚠ MOŻLIWE";
 return"❌ BRAK";
 }
 
+// OKNO
+async function detectWindow(){
+let good=0;
+for(let i=0;i<6;i++){
+let w=await getWind(53.13,26.02,i);
+let d=dirScore(w.dir,routes[0]);
+if(w.speed>14&&d.txt!=="PRZECIWNIE")good++;
+}
+if(good>=3)return"🚀 AKTYWNE";
+return"❌ BRAK";
+}
+
 // TILES
 async function buildTiles(){
 grid.innerHTML="";
-
 for(let i=0;i<5;i++){
 for(let r of routes){
 
 let w=await getWind(r.start.lat,r.start.lon,i*24);
 let d=dirScore(w.dir,r);
-let sc=score(w.speed,d.score,w.unstable);
+let sc=score(w.speed,d.score);
 
 let color="low";
 if(sc>70)color="veryhigh";
 else if(sc>50)color="high";
-else if(sc>25)color="medium";
+else if(sc>35)color="medium";
 
 let tile=document.createElement("div");
 tile.className="tile "+color;
@@ -270,11 +253,11 @@ tile.innerHTML=`
 ${getDate(i)}<br>
 💨 ${w.speed.toFixed(1)} km/h<br>
 ${d.txt}<br>
-🌐 ${w.layer}hPa ${w.unstable?"⚠":""}<br>
+🌐 ${w.l}hPa<br>
 📊 ${sc}%
 `;
 
-tile.onclick=()=>handleClick(r,sc,d.txt);
+tile.onclick=()=>handleClick(r);
 
 grid.appendChild(tile);
 }
@@ -285,19 +268,20 @@ grid.appendChild(tile);
 async function updateReport(){
 let w=await getWind(53.13,26.02,0);
 let d=dirScore(w.dir,routes[0]);
-let sc=score(w.speed,d.score,w.unstable);
+let sc=score(w.speed,d.score);
+
 let trend=await getTrend();
-let p=await predict();
+let prog=await predict();
+let window=await detectWindow();
 
 report.innerHTML=`
 <b>🧠 RAPORT OPERACYJNY</b><br><br>
 Status: ${sc>60?"SPRZYJAJĄCE":"NIE"}<br>
 Wiatr: ${w.speed.toFixed(1)} km/h<br>
-Kierunek: ${d.txt}<br>
-Warstwa: ${w.layer}hPa ${w.unstable?"(niestabilna)":""}<br>
+Warstwa: ${w.l}hPa<br>
 Trend: ${trend}<br>
-Prognoza: ${p}<br>
-Okno: ${(new Date().getHours()>=17||new Date().getHours()<=7)?"AKTYWNE 🌙":"NISKIE ☀️"}
+Prognoza: ${prog}<br>
+Okno: ${window}
 `;
 }
 
@@ -305,9 +289,10 @@ Okno: ${(new Date().getHours()>=17||new Date().getHours()<=7)?"AKTYWNE 🌙":"NI
 function loadAll(){
 buildTiles();
 updateReport();
+loadLive();
 }
 
-setInterval(loadAll,300000);
+setInterval(loadAll,60000);
 loadAll();
 
 </script>
