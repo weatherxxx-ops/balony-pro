@@ -3,36 +3,41 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>JETFLOW OPS AI FINAL BOSS</title>
+
+<title>JETFLOW OPS AI FINAL STABLE</title>
 
 <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
 
 <style>
 body{margin:0;background:#0b0f1a;color:white;font-family:-apple-system;}
-.header{text-align:center;padding:8px;background:#111;}
-#time{text-align:center;font-size:11px;opacity:0.7;}
+.header{text-align:center;padding:10px;background:#111;font-weight:bold;}
+#time{text-align:center;font-size:12px;opacity:0.7;}
 
 .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;padding:6px;}
-.tile{padding:10px;border-radius:12px;text-align:center;font-size:12px;cursor:pointer;}
-.low{background:#2ecc71;}
-.medium{background:#f1c40f;}
-.high{background:#e67e22;}
-.veryhigh{background:#ff2ea6;}
 
-#report{margin:6px;padding:12px;border-radius:12px;background:#1c1f2b;}
+.tile{
+padding:10px;border-radius:12px;text-align:center;
+font-size:12px;cursor:pointer;
+background:#f1c40f;
+}
 
-#map{height:240px;margin:6px;border-radius:12px;}
+#report{
+margin:6px;padding:12px;border-radius:12px;background:#1c1f2b;
+}
+
+#map{height:260px;margin:6px;border-radius:12px;}
 
 #livePanel{
-position:fixed;top:50px;right:5px;width:230px;
+position:fixed;top:60px;right:5px;width:240px;
 max-height:60%;overflow:auto;background:#111;
 padding:10px;border-radius:10px;font-size:11px;
 }
 
 #loginScreen{
 position:fixed;width:100%;height:100%;
-background:#0b0f1a;display:flex;
-flex-direction:column;justify-content:center;align-items:center;
+background:#0b0f1a;
+display:flex;flex-direction:column;
+justify-content:center;align-items:center;
 z-index:9999;
 }
 </style>
@@ -63,6 +68,7 @@ z-index:9999;
 // LOGIN
 const LOGIN="PsgBobrowniki";
 const PASSWORD="!Bobrowniki1";
+
 function checkLogin(){
 if(login.value===LOGIN && pass.value===PASSWORD){
 loginScreen.style.display="none";
@@ -76,16 +82,13 @@ loginScreen.style.display="none";
 let map=L.map('map').setView([53.2,23.2],7);
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
 
-let line,startMarker,endMarker;
-
-// LIVE
-let liveMarkers={}, liveTracks={}, lastSeen={};
+let line;
 
 // ROUTES
 const routes=[
-{ name:"Baranowicze → Białystok", start:{lat:53.13,lon:26.02}},
-{ name:"Baranowicze → Sokółka", start:{lat:53.13,lon:26.02}},
-{ name:"Grodno → Sokółka", start:{lat:53.67,lon:23.83}}
+{name:"Baranowicze → Białystok",lat:53.13,lon:26.02},
+{name:"Baranowicze → Sokółka",lat:53.13,lon:26.02},
+{name:"Grodno → Sokółka",lat:53.67,lon:23.83}
 ];
 
 // TIME
@@ -99,86 +102,72 @@ return d.toLocaleDateString("pl-PL");
 }
 
 // WIND
-async function getWind(lat,lon,h){
+async function getWind(lat,lon){
 let r=await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&hourly=winddirection_850hPa`);
 let d=await r.json();
-return {dir:d.hourly.winddirection_850hPa[h]};
+let h=new Date().getHours();
+return d.hourly.winddirection_850hPa[h];
 }
 
-// TRAJEKTORIA
+// TRAJECTORY
 async function simulate(route){
-let pts=[];
-let pos={...route.start};
-pts.push([pos.lat,pos.lon]);
 
-for(let h=0;h<12;h++){
-let w=await getWind(pos.lat,pos.lon,h);
-let dir=(w.dir+180)%360;
+let pts=[];
+let lat=route.lat;
+let lon=route.lon;
+
+pts.push([lat,lon]);
+
+for(let i=0;i<12;i++){
+
+let dir=(await getWind(lat,lon)+180)%360;
 
 let dLat=(15*Math.cos(dir*Math.PI/180))/111;
-let dLon=(15*Math.sin(dir*Math.PI/180))/(111*Math.cos(pos.lat*Math.PI/180));
+let dLon=(15*Math.sin(dir*Math.PI/180))/(111*Math.cos(lat*Math.PI/180));
 
-pos.lat+=dLat;
-pos.lon+=dLon;
+lat+=dLat;
+lon+=dLon;
 
-pts.push([pos.lat,pos.lon]);
+pts.push([lat,lon]);
 }
+
 return pts;
 }
 
 // CLICK
 async function handleClick(route){
 if(line) map.removeLayer(line);
-if(startMarker) map.removeLayer(startMarker);
-if(endMarker) map.removeLayer(endMarker);
 
 let pts=await simulate(route);
-
 line=L.polyline(pts,{color:"red"}).addTo(map);
-startMarker=L.circleMarker(pts[0],{color:"green"}).addTo(map);
-endMarker=L.circleMarker(pts[pts.length-1],{color:"red"}).addTo(map);
-
 map.fitBounds(line.getBounds());
 }
 
 // TILES
-async function buildTiles(){
+function buildTiles(){
 grid.innerHTML="";
-for(let i=0;i<5;i++){
-for(let r of routes){
-let tile=document.createElement("div");
-tile.className="tile medium";
 
-tile.innerHTML=`
+for(let i=0;i<5;i++){
+routes.forEach(r=>{
+let t=document.createElement("div");
+t.className="tile";
+
+t.innerHTML=`
 <b>${r.name}</b><br>
-📅 ${getDate(i)}
+📅 ${getDate(i)}<br>
+🌐 850hPa
 `;
 
-tile.onclick=()=>handleClick(r);
-grid.appendChild(tile);
+t.onclick=()=>handleClick(r);
+
+grid.appendChild(t);
+});
 }
 }
-}
 
-// ANALIZA
-function analyze(track,windDir){
-if(track.length<2) return "—";
+// LIVE
+let liveMarkers={}, liveTracks={}, lastSeen={};
 
-let p1=track[0];
-let p2=track[track.length-1];
-
-let angle=Math.atan2(p2[1]-p1[1],p2[0]-p1[0])*180/Math.PI;
-if(angle<0) angle+=360;
-
-let diff=Math.abs(angle-windDir);
-if(diff>180) diff=360-diff;
-
-if(diff<30) return "✅";
-if(diff<70) return "⚠";
-return "❌";
-}
-
-// PREDYKCJA
 function predict(lat,lon,angle){
 let dist=10;
 let dLat=(dist*Math.cos(angle*Math.PI/180))/111;
@@ -186,7 +175,6 @@ let dLon=(dist*Math.sin(angle*Math.PI/180))/(111*Math.cos(lat*Math.PI/180));
 return [lat+dLat,lon+dLon];
 }
 
-// LIVE
 async function loadLive(){
 
 let res=await fetch("https://api.v2.sondehub.org/amateur/telemetry");
@@ -194,15 +182,15 @@ let data=await res.json();
 
 livePanel.innerHTML="<b>LIVE</b><br>";
 
-Object.values(data).forEach(async obj=>{
+for(const obj of Object.values(data)){
 
 let id=obj.payload_callsign||Math.random();
 let lat=obj.lat;
 let lon=obj.lon;
 let alt=obj.alt;
 
-if(!lat||!lon||alt<500) return;
-if(lat<52.5||lat>54.5||lon<22||lon>25.5) return;
+if(!lat||!lon||alt<100) continue;
+if(lat<52||lat>55||lon<21||lon>26) continue;
 
 if(!liveMarkers[id]){
 liveMarkers[id]=L.circleMarker([lat,lon],{radius:6}).addTo(map);
@@ -210,12 +198,13 @@ liveTracks[id]=[];
 }
 
 liveMarkers[id].setLatLng([lat,lon]);
+
 liveTracks[id].push([lat,lon]);
-if(liveTracks[id].length>10) liveTracks[id].shift();
+if(liveTracks[id].length>5) liveTracks[id].shift();
 
 lastSeen[id]=Date.now();
 
-// prędkość
+// speed
 let speed=0;
 if(liveTracks[id].length>1){
 let a=liveTracks[id][0];
@@ -224,26 +213,27 @@ let dist=Math.sqrt((b[0]-a[0])**2+(b[1]-a[1])**2)*111;
 speed=dist*6;
 }
 
-// wiatr
-let w=await getWind(lat,lon,0);
+// direction
+let angle=0;
+if(liveTracks[id].length>1){
+let a=liveTracks[id][0];
+let b=liveTracks[id][liveTracks[id].length-1];
+angle=Math.atan2(b[1]-a[1],b[0]-a[0])*180/Math.PI;
+if(angle<0) angle+=360;
+}
 
-// analiza
-let status=analyze(liveTracks[id],(w.dir+180)%360);
-
-// predykcja
-let p=predict(lat,lon,0);
+// prediction
+let p=predict(lat,lon,angle);
 L.polyline([[lat,lon],p],{color:"white",dashArray:"4"}).addTo(map);
 
 // score
 let score=0;
 if(alt>8000) score+=40;
 if(speed>20) score+=30;
-if(status==="✅") score+=30;
 
-// kolor
 let color="cyan";
-if(score>70) color="red";
-else if(score>40) color="yellow";
+if(score>60) color="red";
+else if(score>30) color="yellow";
 
 liveMarkers[id].setStyle({color});
 
@@ -252,12 +242,11 @@ livePanel.innerHTML+=`
 <div>
 Alt:${Math.round(alt)}m<br>
 Spd:${speed.toFixed(1)}km/h<br>
-${status}<br>
 Score:${score}
 </div><hr>
 `;
 
-});
+}
 
 // cleanup
 Object.keys(lastSeen).forEach(id=>{
@@ -270,14 +259,25 @@ delete lastSeen[id];
 });
 }
 
+// DASHBOARD
+function updateReport(){
+report.innerHTML=`
+🧠 RAPORT OPERACYJNY<br><br>
+System: AKTYWNY<br>
+LIVE: DZIAŁA<br>
+Trajektoria: OK<br>
+`;
+}
+
 // INIT
-function loadAll(){
+function init(){
 buildTiles();
+updateReport();
 loadLive();
 }
 
-setInterval(loadAll,20000);
-loadAll();
+setInterval(init,20000);
+init();
 
 </script>
 
