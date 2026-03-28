@@ -1,3 +1,79 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>JETFLOW OPS AI</title>
+
+<link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
+
+<style>
+body{margin:0;background:#0b0f1a;color:white;font-family:-apple-system;}
+.header{text-align:center;padding:8px;background:#111;}
+#time{text-align:center;font-size:11px;opacity:0.7;}
+
+.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;padding:6px;}
+
+.tile{
+padding:10px;border-radius:12px;text-align:center;
+font-size:12px;cursor:pointer;transition:0.2s;
+}
+.tile:hover{transform:scale(1.05);}
+
+.low{background:#2ecc71;}
+.medium{background:#f1c40f;}
+.high{background:#e67e22;}
+.veryhigh{background:#ff2ea6;}
+
+#report{
+margin:6px;padding:12px;border-radius:12px;background:#1c1f2b;
+}
+
+.maps{display:flex;gap:6px;padding:6px;}
+#map{height:230px;flex:1;border-radius:12px;}
+iframe{flex:1;height:230px;border:none;border-radius:12px;}
+
+#alert{
+position:fixed;bottom:40px;left:10px;right:10px;
+background:red;padding:10px;border-radius:10px;
+display:none;text-align:center;font-weight:bold;
+}
+
+#loginScreen{
+position:fixed;width:100%;height:100%;
+background:#0b0f1a;
+display:flex;flex-direction:column;
+justify-content:center;align-items:center;
+z-index:9999;
+}
+</style>
+</head>
+
+<body>
+
+<div id="loginScreen">
+<h2>🔒 Dostęp</h2>
+<input id="login" placeholder="Login"><br><br>
+<input id="pass" type="password" placeholder="Hasło"><br><br>
+<button onclick="checkLogin()">Zaloguj</button>
+<p id="error"></p>
+</div>
+
+<div class="header">🛰 JETFLOW OPS AI</div>
+<div id="time"></div>
+
+<div id="grid" class="grid"></div>
+<div id="report"></div>
+
+<div class="maps">
+<div id="map"></div>
+<iframe src="https://embed.windy.com/embed2.html?lat=53.2&lon=23.2&zoom=6&level=850h&overlay=wind"></iframe>
+</div>
+
+<div id="alert">🚨 PODEJRZANY OBIEKT</div>
+
+<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+
 <script>
 
 // LOGIN
@@ -18,11 +94,7 @@ loginScreen.style.display="none";
 let map=L.map('map').setView([53.2,23.2],6);
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
 
-let line,startMarker,endMarker,animMarker;
-
-// LIVE
-let liveMarkers={}, liveTracks={}, lastSeen={};
-let heatCircle=null;
+let line, startMarker, endMarker, animMarker;
 
 // ROUTES
 const routes=[
@@ -41,45 +113,39 @@ d.setDate(d.getDate()+i);
 return d.toLocaleDateString("pl-PL");
 }
 
-// WIND (3 WARSTWY)
-async function getWindFull(lat,lon,h){
+// WIND
+async function getWind(lat,lon,h){
 let r=await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&hourly=windspeed_925hPa,windspeed_850hPa,windspeed_700hPa,winddirection_925hPa,winddirection_850hPa,winddirection_700hPa`);
 let d=await r.json();
 
-return {
-dir925:d.hourly.winddirection_925hPa[h],
-dir850:d.hourly.winddirection_850hPa[h],
-dir700:d.hourly.winddirection_700hPa[h],
+let layers=[
+{speed:d.hourly.windspeed_925hPa[h],dir:d.hourly.winddirection_925hPa[h],l:"925"},
+{speed:d.hourly.windspeed_850hPa[h],dir:d.hourly.winddirection_850hPa[h],l:"850"},
+{speed:d.hourly.windspeed_700hPa[h],dir:d.hourly.winddirection_700hPa[h],l:"700"}
+];
 
-spd925:d.hourly.windspeed_925hPa[h],
-spd850:d.hourly.windspeed_850hPa[h],
-spd700:d.hourly.windspeed_700hPa[h]
-};
+layers.sort((a,b)=>b.speed-a.speed);
+return layers[0];
 }
 
-// DO KAFELKÓW (zostaje)
-async function getWind(lat,lon,h){
-let w=await getWindFull(lat,lon,h);
-return {speed:(w.spd925+w.spd850+w.spd700)/3,dir:(w.dir925+w.dir850+w.dir700)/3,l:"mix"};
-}
-
-// TRAJEKTORIA FIX
+// TRAJEKTORIA
 async function simulate(route){
 
 let pts=[];
 let pos={...route.start};
 
+// 🔥 START FIX
 pts.push([pos.lat,pos.lon]);
 
 for(let h=0;h<12;h++){
 
-let w=await getWindFull(pos.lat,pos.lon,h);
+let w=await getWind(pos.lat,pos.lon,h);
+let dir=(w.dir+180)%360;
 
-let dir=(w.dir925+w.dir850+w.dir700)/3 + 180;
-let speed=(w.spd925+w.spd850+w.spd700)/3;
+let dist=w.speed;
 
-let dLat=(speed*Math.cos(dir*Math.PI/180))/111;
-let dLon=(speed*Math.sin(dir*Math.PI/180))/(111*Math.cos(pos.lat*Math.PI/180));
+let dLat=(dist*Math.cos(dir*Math.PI/180))/111;
+let dLon=(dist*Math.sin(dir*Math.PI/180))/(111*Math.cos(pos.lat*Math.PI/180));
 
 pos.lat+=dLat;
 pos.lon+=dLon;
@@ -88,19 +154,6 @@ pts.push([pos.lat,pos.lon]);
 }
 
 return pts;
-}
-
-// HEATMAPA (obszar spadku)
-function drawHeat(end){
-
-if(heatCircle) map.removeLayer(heatCircle);
-
-heatCircle=L.circle(end,{
-radius:15000,
-color:"red",
-fillColor:"red",
-fillOpacity:0.2
-}).addTo(map);
 }
 
 // ANIMACJA
@@ -127,105 +180,21 @@ if(endMarker) map.removeLayer(endMarker);
 
 let pts=await simulate(route);
 
+// linia
 line=L.polyline(pts,{color:"red",weight:3}).addTo(map);
 
-startMarker=L.circleMarker(pts[0],{color:"green"}).addTo(map);
-endMarker=L.circleMarker(pts[pts.length-1],{color:"red"}).addTo(map);
+// START
+startMarker=L.circleMarker(pts[0],{color:"green"}).addTo(map)
+.bindPopup("START");
 
-drawHeat(pts[pts.length-1]); // 🔥 HEAT
+// KONIEC
+endMarker=L.circleMarker(pts[pts.length-1],{color:"red"}).addTo(map)
+.bindPopup("KONIEC");
 
+// animacja
 animate(pts);
+
 map.fitBounds(line.getBounds());
-}
-
-// ANALIZA LIVE
-function analyze(track,wind){
-
-if(track.length<2)return{score:0};
-
-let a=track[0];
-let b=track[track.length-1];
-
-let angle=Math.atan2(b[1]-a[1],b[0]-a[0])*180/Math.PI;
-if(angle<0)angle+=360;
-
-let diff=Math.abs(angle-wind.dir);
-if(diff>180) diff=360-diff;
-
-let score=0;
-
-if(diff<30) score+=40;
-else if(diff<70) score+=20;
-
-if(wind.speed>15) score+=30;
-
-return {score,angle};
-}
-
-// LIVE
-async function loadLive(){
-
-let res=await fetch("https://api.v2.sondehub.org/amateur/telemetry");
-let data=await res.json();
-
-alert.style.display="none";
-
-for(const obj of Object.values(data)){
-
-let id=obj.payload_callsign||Math.random();
-let lat=obj.lat;
-let lon=obj.lon;
-let alt=obj.alt;
-
-if(!lat||!lon||alt<100) continue;
-if(lat<51||lat>56||lon<20||lon>28) continue;
-
-if(!liveMarkers[id]){
-liveMarkers[id]=L.circleMarker([lat,lon],{
-radius:7,color:"white",fillColor:"cyan",fillOpacity:0.8
-}).addTo(map);
-
-liveTracks[id]=[];
-}
-
-liveMarkers[id].setLatLng([lat,lon]);
-liveTracks[id].push([lat,lon]);
-
-if(liveTracks[id].length>6) liveTracks[id].shift();
-
-lastSeen[id]=Date.now();
-
-// ślad
-if(liveTracks[id].length>1){
-L.polyline(liveTracks[id],{color:"cyan"}).addTo(map);
-}
-
-// wiatr + analiza
-let wind=await getWind(lat,lon,0);
-let resu=analyze(liveTracks[id],wind);
-
-// kolor
-let color="cyan";
-if(resu.score>60) color="red";
-else if(resu.score>30) color="yellow";
-
-liveMarkers[id].setStyle({color,fillColor:color});
-
-// ALERT
-if(resu.score>70 && alt>5000){
-alert.style.display="block";
-}
-}
-
-// cleanup
-Object.keys(lastSeen).forEach(id=>{
-if(Date.now()-lastSeen[id]>90000){
-map.removeLayer(liveMarkers[id]);
-delete liveMarkers[id];
-delete liveTracks[id];
-delete lastSeen[id];
-}
-});
 }
 
 // SCORE
@@ -237,7 +206,7 @@ if(speed>10)return 30;
 return 10;
 }
 
-// TILES (bez zmian)
+// TILES
 async function buildTiles(){
 
 grid.innerHTML="";
@@ -260,7 +229,7 @@ tile.innerHTML=`
 <b>${r.name}</b><br>
 📅 ${getDate(i)}<br>
 💨 ${w.speed.toFixed(1)} km/h<br>
-🌐 ${w.l}<br>
+🌐 ${w.l} hPa<br>
 📊 ${sc}%
 `;
 
@@ -271,17 +240,55 @@ grid.appendChild(tile);
 }
 }
 
-// RAPORT (lekko poprawiony)
+// TREND
+async function getTrend(){
+let w1=await getWind(53.13,26.02,0);
+let w2=await getWind(53.13,26.02,3);
+
+if(w2.speed>w1.speed)return"📈 ROŚNIE";
+if(w2.speed<w1.speed)return"📉 SPADA";
+return"➡ STABILNY";
+}
+
+// PROGNOZA
+async function predict(){
+let good=0;
+for(let i=0;i<6;i++){
+let w=await getWind(53.13,26.02,i);
+if(w.speed>15)good++;
+}
+if(good>=4)return"🚀 WYSOKIE";
+if(good>=2)return"⚠ MOŻLIWE";
+return"❌ BRAK";
+}
+
+// OKNO
+async function detectWindow(){
+let good=0;
+for(let i=0;i<6;i++){
+let w=await getWind(53.13,26.02,i);
+if(w.speed>14)good++;
+}
+if(good>=3)return"🌙 AKTYWNE";
+return"❌ BRAK";
+}
+
+// RAPORT
 async function updateReport(){
 
 let w=await getWind(53.13,26.02,0);
 
+let trend=await getTrend();
+let prog=await predict();
+let window=await detectWindow();
+
 report.innerHTML=`
 <b>🧠 RAPORT OPERACYJNY</b><br><br>
-System: AKTYWNY<br>
-LIVE: DZIAŁA<br><br>
 Wiatr: ${w.speed.toFixed(1)} km/h<br>
-Warstwy: 925 / 850 / 700 hPa<br>
+Warstwa: ${w.l} hPa<br>
+Trend: ${trend}<br>
+Prognoza: ${prog}<br>
+Okno: ${window}
 `;
 }
 
@@ -289,10 +296,12 @@ Warstwy: 925 / 850 / 700 hPa<br>
 function loadAll(){
 buildTiles();
 updateReport();
-loadLive();
 }
 
-setInterval(loadAll,20000);
+setInterval(loadAll,60000);
 loadAll();
 
 </script>
+
+</body>
+</html>
